@@ -1,0 +1,111 @@
+import struct
+
+from PyQt4 import QtCore
+
+import os
+import random
+
+def q2s(s):
+	"""Convert QString to UTF-8 string object"""
+	return str(s.toUtf8())
+
+def s2q(s):
+	"""Convert UTF-8 encoded string to QString"""
+	return QtCore.QString.fromUtf8(s)
+
+class Magic(object):
+	"""
+	Few magic constant definitions so that we know which nodes to search
+	for keys.
+	"""
+	u = lambda fmt, s: struct.unpack(fmt, s)[0]
+	headerStr = "TSFE"
+	hdr = u("!I", headerStr)
+
+	# first level encryption
+	unlockNode = [hdr, u("!I", "ULCK")] # unlock key for first level AES encryption
+	unlockKey = "Decrypt file for first time?" # string to derive wrapping key from
+
+	# second level encryption
+	levelTwoNode = [hdr, u("!I", "DEC2")] # second level AES encryption
+	levelTwoKey = "Decrypt file for second time?" # string to derive wrapping key from
+
+	# only used for filename encryption (no confirm button click desired)
+	fileNameNode = [hdr, u("!I", "FLNM")] # filename encryption for filename obfuscation
+	fileNameKey = "Decrypt filename only?" # string to derive wrapping key from
+
+	#unlockNode = [hdr, u("!I", "ULCK")] # for unlocking wrapped AES-CBC key
+	#groupNode  = [hdr, u("!I", "GRUP")] # for generating keys for individual password groups
+	#the unlock and backup key is written in this weird way to fit display nicely
+	#unlockKey = "Decrypt master  key?" # string to derive wrapping key from
+
+	#backupNode = [hdr, u("!I", "BKUP")] # for unlocking wrapped backup private RSA key
+	#backupKey = "Decrypt backup  key?" # string to derive backup wrapping key from
+
+class Padding(object):
+	"""
+	PKCS#7 Padding for block cipher having 16-byte blocks
+	"""
+
+	def __init__(self, blocksize):
+		self.blocksize = blocksize
+
+	def pad(self, s):
+		BS = self.blocksize
+		return s + (BS - len(s) % BS) * chr(BS - len(s) % BS)
+
+	def unpad(self, s):
+		return s[0:-ord(s[-1])]
+
+class PaddingHomegrown(object):
+	"""
+	Pad filenames that are already base64 encoded. Must have length of multiple of 4.
+	Base64 always have a length of mod 4, padded with =
+	Examples: YQ==, YWI=, YWJj, YWJjZA==, YWJjZGU=, YWJjZGVm, ...
+	On padding we remove the = pad, then we pad to a mod 16.
+	If length is already mod 16, it will be padded with 16 chars. So in all cases we pad.
+	The last letter always replresents how many chars have been padded (A=1, ..., P=16).
+	The last letter is out of the alphabet A..P.
+	The padded letters before the last letter are random in the a..zA..Z alphabet.
+	"""
+
+	def __init__(self):
+		self.homegrownblocksize = 16
+		self.base64blocksize = 4
+
+	def pad(self, s):
+		"""
+		input must be in valid base64 format
+		"""
+		# the randomness can be poor, it does not matter, it is just used for buffer letters in the file name
+		urandom_entropy = os.urandom(64)
+		random.seed(urandom_entropy)
+		# remove the base64 buffer char =
+		t = s.translate(None, '=')
+		initlen = len(t)
+		BS = self.homegrownblocksize
+		bufLen = BS - len(t) % BS
+		r = initlen*ord(t[-1])*ord(t[:1])
+		for x in range(0, bufLen-1):
+			# Old version:
+			# this was not convenient,
+			# on various encryptions of the same file, multiple encrypted files
+			# with different names would be created, requiring cleanup by
+			# the user as the mapping from plaintext filename to obfuscated
+			# filename was not deterministic
+			# r = random.randint(0, 51) # old version
+			# New version
+			# deterministic mapping of plaintext filename to obfuscated file name
+			r = (((r+17)*15485863) % 52) # new version
+			if r < 26:
+				c = chr(r+ord('a'))
+			else:
+				c = chr(r+ord('A')-26)
+			t += c
+		t += chr(BS - initlen % BS + ord('A') - 1)
+		return t
+
+	def unpad(self, s):
+		t = s[0:-(ord(s[-1])-ord('A')+1)]
+		BS = self.base64blocksize
+		return t + "=" * ((BS - len(t) % BS) % BS)
