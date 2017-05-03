@@ -31,7 +31,7 @@ Note that it is software, currently in alpha stage.
 
 Below a sample screenshot. More screenshots [here](https://github.com/8go/TrezorSymmetricFileEncryption/tree/master/screenshots).
 
-![screenshot](https://github.com/8go/TrezorSymmetricFileEncryption/blob/master/screenshots/screenshot_TrezorSymmetricFileEncryption_mainWindow2.version01a.png)
+![screenshot](https://github.com/8go/TrezorSymmetricFileEncryption/blob/master/screenshots/screenshot_TrezorSymmetricFileEncryption_mainWindow1.version01a.png)
 
 # Build and runtime requirements
 
@@ -279,4 +279,4 @@ your mileage may vary as speed depends on CPU and disk speed.
 **Answer:** Let us know.
 - - -
 
-< > on :octocat: with :heart:
+</> on :octocat: with :heart:
