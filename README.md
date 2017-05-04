@@ -18,12 +18,24 @@ Note that it is software, currently in alpha stage.
   * One Trezor for all your needs: gpg, ssh, **symmetric encryption**, etc.
   * Encrypt your files for your use, guarantee your privacy
   * Requires confirmation button click on Trezor device to perform decrypt operation.
+  * For the paranoid there is now an option to encrypt the file(s) twice.
+    In any mode, the file is first AES encrypted on the PC with a key generated
+    and en/decrypted by the Trezor device requiring a lick on the `Confirm`
+    button of the Trezor. In the paranoid mode, the file is then encrypted
+    a second time. This second encryption is done within the Trezor device
+    and not on the PC, with no key ever touching the memory of the PC.
+    The PC just feeds the file
+    to the Trezor and receives the results, but the PC is not doing any actual
+    encryption. The actual en/decryption takes place on the Trezor chip.
+    This paranoid mode is significantly slower than the regular mode.
   * It supports both GUI mode and Terminal mode.
-  * Even in Terminal mode the PIN is entered through a small GUI window.
+  * Even in Terminal mode the PIN, if required, is entered through a small GUI window.
     For safety we also recommend to enter the passphrase through a small GUI
     window even in Terminal mode as it is not a good practice to place a
     passphrase on the command line.
-  * Since it is a simple script it is easy to automate workflows
+  * Since it is a program that has a full CLI (command line interface)
+    it is easy to create scripts or to automate workflows. Keep in mind though
+    that you will have to confirm on the trezor by clicking its `Confirm` button.
   * Optionally obfuscates/encrypts filenames on encryption to hide meta-data (i.e. the file names)
   * Use it before and after you store sensitive information on DropBox or Google Drive
 
@@ -31,7 +43,7 @@ Note that it is software, currently in alpha stage.
 
 Below a sample screenshot. More screenshots [here](https://github.com/8go/TrezorSymmetricFileEncryption/tree/master/screenshots).
 
-![screenshot](https://github.com/8go/TrezorSymmetricFileEncryption/blob/master/screenshots/screenshot_TrezorSymmetricFileEncryption_mainWindow1.version01a.png)
+![screenshot](https://github.com/8go/TrezorSymmetricFileEncryption/blob/master/screenshots/screenshot_TrezorSymmetricFileEncryption_mainWindow1.version02b.png)
 
 # Build and runtime requirements
 
@@ -62,47 +74,66 @@ Run:
 Run-time command line options are
 
 ```
-TrezorSymmetricFileEncryption.py [-v] [-h] [-l <level>] [-n] [-t] [-o | -e | -d] [-p <passphrase>] <files>
-  -v, --verion          ... optional ... print the version number
-  -h, --help            ... optional ... print short help text
-  -l, --logging         ... optional ... set logging level, integer from 1 to 5, 1=full logging, 5=no logging
-  -t, --terminal        ... optional ... run in the terminal, except for PIN query
-                                         and possibly a Passphrase query this avoids the GUI
-  -n, --nameonly        ... optional ... just decrypt an obfuscated filename,
-                                         does not decrypt the file itself, incompaible with `-o` and `-e`
-  -d, --decrypt         ... optional ... decrypt file
-  -e, --encrypt         ... optional ... encrypt file and keep plaintext file name for output (appends .tsfe suffix)
-  -o, --obfuscatedencrypt . optional ... encrypt file and obfuscate file name of output
-  -p, --passphrase      ... optional ... master passphrase used for Trezor
-                                         It is recommended that you do not use this command line option
-                                         but rather give the passphrase through a small window interaction.
-  <files>               ...              one or multiple files to be encrypted or decrypted
+TrezorSymmetricFileEncryption.py [-v] [-h] [-l <level>] [-t] [-2] [-o | -e | -d | -n] [-p <passphrase>] <files>
+    -v, --verion          ... optional ... print the version number
+    -h, --help            ... optional ... print short help text
+    -l, --logging         ... optional ... set logging level, integer from 1 to 5, 1=full logging, 5=no logging
+    -t, --terminal        ... optional ... run in the terminal, except for PIN query
+                                           and possibly a Passphrase query this avoids the GUI
+    -m, --encnameonly     ... optional ... just encrypt the plaintext filename, show what the obfuscated filename would be
+                                           does not encrypt the file itself, incompaible with `-d` and `-n`
+    -n, --decnameonly     ... optional ... just decrypt the obfuscated filename,
+                                           does not decrypt the file itself, incompaible with `-o`, `-e`, and `-m`
+    -d, --decrypt         ... optional ... decrypt file
+    -e, --encrypt         ... optional ... encrypt file and keep plaintext file name for output (appends .tsfe suffix)
+    -o, --obfuscatedencrypt . optional ... encrypt file and obfuscate file name of output
+    -2, --twice           ... optional ... paranoid mode; encrypt file a second time on the Trezor chip itself;
+                                           only relevant for `-e` and `-o`; ignored in all other cases.
+                                           Consider filesize: The Trezor chip is slow. 1M takes roughly 75 seconds.
+    -p, --passphrase      ... optional ... master passphrase used for Trezor
+                                           It is recommended that you do not use this command line option
+                                           but rather give the passphrase through a small window interaction.
+    <files>               ...              one or multiple files to be encrypted or decrypted
 
-  By default it will use a GUI.
+    By default it will use a GUI.
 
-  You can force it to avoid the GUI by using `-t`, the Terminal mode.
-  If you specify filename, possibly some `-o`, `-e`, or `-d` option, then
-  only PIN and Passphrase will be collected through windows.
+    You can force it to avoid the GUI by using `-t`, the Terminal mode.
+    If you specify filename, possibly some `-o`, `-e`, or `-d` option, then
+    only PIN and Passphrase will be collected through windows.
 
-  Using the GUI has the advantage that no passphrase has to be specified in the command line.
-  So, using the GUI is safer.
+    Using the GUI has the advantage that no passphrase has to be specified in the command line.
+    So, using the GUI is safer.
 
-  Most of the time TrezorSymmetricFileEncryption can detect automatically if
-  it needs to decrypt or encrypt by analyzing the given input file name.
-  So, in most of the cases you do not need to specify any
-  de/encryption option.
-  TrezorSymmetricFileEncryption will simply do the right thing.
-  In the very rare case that TrezorSymmetricFileEncryption determines
-  the wrong encrypt/decrypt operation you can force it to use the right one
-  by using either `-e` or `-d` or selecting the appropriate option in the GUI.
+    Most of the time TrezorSymmetricFileEncryption can detect automatically if
+    it needs to decrypt or encrypt by analyzing the given input file name.
+    So, in most of the cases you do not need to specify any
+    de/encryption option.
+    TrezorSymmetricFileEncryption will simply do the right thing.
+    In the very rare case that TrezorSymmetricFileEncryption determines
+    the wrong encrypt/decrypt operation you can force it to use the right one
+    by using either `-e` or `-d` or selecting the appropriate option in the GUI.
 
-  If TrezorSymmetricFileEncryption automatically choses the encryption
-  option for you, it will chose by default the `-e`, and create
-  plaintext encrypted files with an `.tsfe` suffix.
+    If TrezorSymmetricFileEncryption automatically choses the encryption
+    option for you, it will chose by default the `-e`, and create
+    plaintext encrypted files with an `.tsfe` suffix.
 
-  If you want the output file name to be obfuscated you
-  must use the `-o` (obfuscate) flag or select that option in the GUI.
+    If you want the output file name to be obfuscated you
+    must use the `-o` (obfuscate) flag or select that option in the GUI.
+
+    Be aware of computation time and file sizes when you use `-2` option.
+    Encrypting on the Trezor takes time: 1M roughtly 75sec. 50M about 1h.
+    Without `-2` a 1G file takes roughly 15 seconds.
 ```
+
+# Testing
+
+Run the `Bash` script
+
+    ./testTrezorSymmetricFileEncryption.sh 1K
+
+or for a full lengthy test
+
+    ./testTrezorSymmetricFileEncryption.sh
 
 # FAQ - Frequently Asked Questions
 
@@ -234,6 +265,9 @@ You can move it around via an USB stick, SD card, email or cloud service.
 
 **Answer:** Yes. It is open source.
 Go to [Github](https://github.com/8go/TrezorSymmetricFileEncryption).
+You can also help by getting the word out.
+If you like it or like the idea please spread the word on Twitter, Reddit,
+Facebook, etc. It will be appreciated.
 - - -
 **Question:** What if I lose my Trezor and my 24 Trezor seed words or
 my TrezorSymmetricFileEncryption master password (= Trezor passphrase)?
@@ -266,9 +300,12 @@ Testing has only been done on Linux.
 - - -
 **Question:** Is it fast?
 
-**Answer:** It is reasonably fast; like any AES implementation.
-Encryypting or decrypting a 1G file takes about 15 seconds, but
-your mileage may vary as speed depends on CPU and disk speed.
+**Answer:** Regular mode (encrypting once) is fast; like any AES implementation.
+Encrypting or decrypting a 1G file takes about 15 seconds, but
+your mileage may vary as speed depends on CPU and disk speed. If you
+encrypt a second time on the Trezor device itself, it is slow as the CPU
+performance on the Trezor device is limited. Encrypting a second time
+takes about 75 seconds per Megabyte.
 - - -
 **Question:** Are there any warranties or guarantees?
 

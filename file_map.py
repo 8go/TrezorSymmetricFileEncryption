@@ -7,6 +7,8 @@ import hmac
 import hashlib
 import base64
 import binascii
+import mmap
+import datetime
 
 from Crypto.Cipher import AES
 from Crypto import Random
@@ -49,12 +51,12 @@ class FileMap(object):
 		self.noOfEncryptions = None
 		self.logger = logger
 
-	def load(self, fname):
+	def loadBlobFromEncFile(self, fname):
 		"""
-		Load data from disk file, decrypt outer
-		layer containing key names. Requires Trezor connected.
+		Load/read data from encrypted file, decrypt data amd store data in blob
+		Requires Trezor connected.
 
-		@param fname: filename from where to read the blob
+		@param fname: name of the encrypted file to decrypt
 
 		@throws IOError: if reading file failed
 		"""
@@ -88,11 +90,11 @@ class FileMap(object):
 			if len(wrappedKey) != KEYSIZE:
 				raise IOError("Corrupted disk format - bad wrapped key length")
 
-			self.outerKey = self.unwrapKey(wrappedKey)
-
 			self.outerIv = f.read(BLOCKSIZE)
 			if len(self.outerIv) != BLOCKSIZE:
 				raise IOError("Corrupted disk format - bad IV length")
+
+			self.outerKey = self.unwrapKey(wrappedKey,self.outerIv)
 
 			ls = f.read(4) # these are 4 unused bytes to make it future proof for 4G+ files
 			if len(ls) != 4:
@@ -108,6 +110,7 @@ class FileMap(object):
 				raise IOError("Corrupted disk format - not enough data bytes")
 
 			hmacDigest = f.read(MACSIZE)
+			f.close()
 			if len(hmacDigest) != MACSIZE:
 				raise IOError("Corrupted disk format - HMAC not complete")
 
@@ -119,32 +122,89 @@ class FileMap(object):
 			if hmacCompare != 0:
 				raise IOError("Corrupted disk format - HMAC does not match or bad passphrase")
 
-			serialized = self.decryptOuter(encrypted, self.outerIv)
-
 			if self.noOfEncryptions == 2:
 				# ZZZ
-				serialized = serialized
+				encrypted = self.decryptOnTrezorDevice(encrypted, Magic.levelTwoKey)
+
+			serialized = self.decryptOuter(encrypted, self.outerIv)
 
 			self.blob = serialized
+
+	def createDecFile(self, fname):
+		"""
+		read encrypted file, then open, write and save plaintext file
+		@param fname: name of the encrypted file to decrypt
+		"""
+		originalFilename = fname
+		head, tail = os.path.split(fname)
+
+		if tail.endswith(basics.TSFEFILEEXT):
+			isObfuscated = False
+			fname = fname[:-len(basics.TSFEFILEEXT)]
+		else:
+			isObfuscated = True
+			fname = os.path.join(head, self.deobfuscateFilename(tail))
+
+		self.logger.debug("Decryption trying to write to file %s.",fname)
+
+		if os.path.isfile(fname):
+			self.logger.warning("File %s exists and decrytion will overwrite it.", fname)
+			if not os.access(fname, os.W_OK):
+				self.logger.error("File %s cannot be written. No write permissions. Skipping it.", fname)
+				return
+
+		self.loadBlobFromEncFile(originalFilename)
+		with open(fname, 'w+b') as f:
+			s = len(self.blob)
+			f.write(self.blob)
+			if f.tell() != s:
+				raise IOError("File IO problem - not enough data written")
+			self.logger.debug("Decryption wrote %d bytes to file %s.",s,fname)
+			f.flush()
 			f.close()
 
-	def save(self, fname, obfuscate):
+	def createEncFile(self, fname, obfuscate, twice):
 		"""
-		Write data to disk, encrypt it. Requires Trezor connected.
+		read plaintext file, then open, write and save encrypted file
+		@param fname: name of the plaintext file to encrypt
+		@param twice: True if data should be encrypted twice
+		"""
 
-		@param fname: base of the filename where the encrypted blob is written to, it will be adjusted with a new extension or obfuscated.
-		@param obfuscate: bool to indicate if an obfuscated filename (True) is desired or a plaintext filename (False)
+		with open(fname, 'rb') as f:
+			# Size 0 will read the ENTIRE file into memory!
+			m = mmap.mmap(f.fileno(), 0, prot=mmap.PROT_READ) #File is open read-only
+			s = m.size()
+			self.blob = m.read(s)
+			m.close()
+			f.close()
+		if len(self.blob) != s:
+			raise IOError("File IO problem - not enough data read")
+		self.logger.debug("Read %d bytes from file %s.",s,fname)
+		# encrypt
+		rng = Random.new()
+		self.outerKey = rng.read(KEYSIZE)
+		self.versionSw = basics.TSFEVERSION
+		self.noOfEncryptions = 1
+		self.saveBlobToEncFile(fname, obfuscate, twice)
+
+	def saveBlobToEncFile(self, fname, obfuscate, twice):
+		"""
+		Take blob, encrypt blob, and write encrypted data to disk. Requires Trezor connected.
+
+		@param fname: the name of the plaintext file, it will be used to derive the name of the encrypted file
+		@param obfuscate: bool to indicate if an obfuscated filename (True) is desired or a plaintext filename (False) for the encrypted file
+		@param twice: True if data should be encrypted twice
 
 		@throws IOError: if writing file failed
 		"""
 		assert len(self.outerKey) == KEYSIZE
 		rnd = Random.new()
 		self.outerIv = rnd.read(BLOCKSIZE)
-		wrappedKey = self.wrapKey(self.outerKey)
+		wrappedKey = self.wrapKey(self.outerKey,self.outerIv)
 
 		if obfuscate:
 			head, tail = os.path.split(fname)
-			fname = os.path.join(head, self.obfuscateFilename(tail))  # ZZZ
+			fname = os.path.join(head, self.obfuscateFilename(tail))
 		else:
 			fname += basics.TSFEFILEEXT
 
@@ -161,6 +221,10 @@ class FileMap(object):
 			f.write(struct.pack("!I", version))
 			versionSw = self.versionSw.ljust(16) # add padding
 			f.write(versionSw)
+			if twice:
+				self.noOfEncryptions = 2
+			else:
+				self.noOfEncryptions = 1
 			f.write(struct.pack("!I", self.noOfEncryptions))
 			futureUse = futureUse.ljust(32) # add padding
 			f.write(futureUse)
@@ -171,7 +235,7 @@ class FileMap(object):
 
 			if self.noOfEncryptions == 2:
 				# ZZZ
-				encrypted = encrypted
+				encrypted = self.encryptOnTrezorDevice(encrypted, Magic.levelTwoKey)
 
 			hmacDigest = hmac.new(self.outerKey, encrypted, hashlib.sha256).digest()
 			f.write(b'\x00\x00\x00\x00') # unused, fill 4 bytes with 0
@@ -190,11 +254,11 @@ class FileMap(object):
 		"""
 		pad16 = Padding(BLOCKSIZE).pad(plaintextFileName)
 		self.logger.debug("Press confirm on Trezor device to encrypt file name %s (if necessary).", plaintextFileName)
-		encFn = self.trezor.encrypt_keyvalue(Magic.fileNameNode, Magic.fileNameKey, pad16, ask_on_encrypt=False, ask_on_decrypt=True)
+		encFn = self.trezor.encrypt_keyvalue(Magic.fileNameNode, Magic.fileNameKey, pad16, ask_on_encrypt=False, ask_on_decrypt=True) # we do not use an IV here so that we can quickly deobfuscate filenames without reading the file
 		bs64 = base64.urlsafe_b64encode(encFn) # mod 4
 		ret = PaddingHomegrown().pad(bs64) # mod 16
-		self.logger.debug("The obfuscated filename for %s is %s.", plaintextFileName, ret)
-		self.logger.debug("\nplaintext is %s (%d), \npad16 is %s (%d), \nencFn is %s (%d), \nbs64 is %s (%d), \nhgP is %s (%d)", plaintextFileName, len(plaintextFileName), pad16, len(pad16), binascii.hexlify(encFn), len(encFn), bs64, len(bs64), ret, len(ret))
+		self.logger.debug("The obfuscated filename for \"%s\" is \"%s\".", plaintextFileName, ret)
+		# self.logger.debug("\n\tplaintext is %s (%d), \n\tpad16 is %s (%d), \n\tencFn is %s (%d), \n\tbs64 is %s (%d), \n\thgP is %s (%d)", plaintextFileName, len(plaintextFileName), pad16, len(pad16), binascii.hexlify(encFn), len(encFn), bs64, len(bs64), ret, len(ret))
 		return ret
 
 	def deobfuscateFilename(self, obfuscatedFileName):
@@ -206,10 +270,10 @@ class FileMap(object):
 		self.logger.debug("Press confirm on Trezor device to decrypt file name %s (if necessary).", obfuscatedFileName)
 		if len(bs64) % BLOCKSIZE != 0:
 			raise ValueError("Internal error. File name " + obfuscatedFileName + " could not be deobfuscated. Skipping it.")
-		decFn = self.trezor.decrypt_keyvalue(Magic.fileNameNode, Magic.fileNameKey, bs64, ask_on_encrypt=False, ask_on_decrypt=True)
+		decFn = self.trezor.decrypt_keyvalue(Magic.fileNameNode, Magic.fileNameKey, bs64, ask_on_encrypt=False, ask_on_decrypt=True) # we do not use an IV here so that we can quickly deobfuscate filenames without reading the file, even for files that do not exist
 		ret = Padding(BLOCKSIZE).unpad(decFn)
 		self.logger.debug("The plaintext filename for %s is %s.", obfuscatedFileName, ret)
-		self.logger.debug("\nobfuscatedFileName is %s (%d), \nhgUp is %s (%d), \nbs64 is %s (%d), \ndecFn is %s (%d), \nret is %s (%d)", obfuscatedFileName, len(obfuscatedFileName), hgUp, len(hgUp), binascii.hexlify(bs64), len(bs64), decFn, len(decFn), ret, len(ret))
+		# self.logger.debug("\n\tobfuscatedFileName is %s (%d), \n\thgUp is %s (%d), \n\tbs64 is %s (%d), \n\tdecFn is %s (%d), \n\tret is %s (%d)", obfuscatedFileName, len(obfuscatedFileName), hgUp, len(hgUp), binascii.hexlify(bs64), len(bs64), decFn, len(decFn), ret, len(ret))
 		if len(ret) == 0:
 			raise ValueError("Decrypting name of " + obfuscatedFileName + " failed. Wrong Trezor device?")
 		return ret
@@ -243,68 +307,100 @@ class FileMap(object):
 		unpadded = Padding(BLOCKSIZE).unpad(plaintext)
 		return unpadded
 
-	def unwrapKey(self, wrappedOuterKey):
+	def unwrapKey(self, wrappedOuterKey, iv):
 		"""
 		Decrypt wrapped outer key using Trezor.
 		"""
 		self.logger.debug("Press confirm on Trezor device to decrypt key for first level of file decryption (if necessary).")
-		ret = self.trezor.decrypt_keyvalue(Magic.unlockNode, Magic.unlockKey, wrappedOuterKey, ask_on_encrypt=False, ask_on_decrypt=True)
+		ret = self.trezor.decrypt_keyvalue(Magic.levelOneNode, Magic.levelOneKey, wrappedOuterKey, ask_on_encrypt=False, ask_on_decrypt=True, iv=iv)
 		if len(ret) == 0:
 			raise ValueError("Decrypting data failed. Wrong Trezor device?")
 		return ret
 
-	def wrapKey(self, keyToWrap):
+	def wrapKey(self, keyToWrap, iv):
 		"""
 		Encrypt/wrap a key. Its size must be multiple of 16.
 		"""
-		ret = self.trezor.encrypt_keyvalue(Magic.unlockNode, Magic.unlockKey, keyToWrap, ask_on_encrypt=False, ask_on_decrypt=True)
+		ret = self.trezor.encrypt_keyvalue(Magic.levelOneNode, Magic.levelOneKey, keyToWrap, ask_on_encrypt=False, ask_on_decrypt=True, iv=iv)
 		return ret
 
-	def encryptPassword(self, password, groupName):
+	def encryptOnTrezorDevice(self, blob, keystring):
 		"""
-		Encrypt a password. Does PKCS#5 padding before encryption.
+		Encrypt data. Does PKCS#5 padding before encryption.
 		Store IV as first block.
 
-		@param groupName key that will be shown to user on Trezor and
-			used to encrypt the password. A string in utf-8
+		@param keystring: key that will be shown to user on Trezor and
+			used to encrypt the data. A string in utf-8
 		"""
+		self.logger.debug('time entering encryptOnTrezorDevice: %s', datetime.datetime.now())
 		rnd = Random.new()
 		rndBlock = rnd.read(BLOCKSIZE)
-		ugroup = groupName.decode("utf-8")
+		ukeystring = keystring.decode("utf-8")
 		# minimum size of unpadded plaintext as input to trezor.encrypt_keyvalue() is 0    ==> padded that is 16 bytes
 		# maximum size of unpadded plaintext as input to trezor.encrypt_keyvalue() is 1023 ==> padded that is 1024 bytes
 		# plaintext input to trezor.encrypt_keyvalue() must be a multiple of 16
 		# trezor.encrypt_keyvalue() throws error on anythin larger than 1024
-		# In order to handle passwords+comments larger than 1023 we junk the passwords+comments
+		# In order to handle blobs larger than 1023 we junk the blobs
 		encrypted = ""
 		first = True
-		splits=[password[x:x+self.MAXUNPADDEDTREZORENCRYPTSIZE] for x in range(0,len(password),self.MAXUNPADDEDTREZORENCRYPTSIZE)]
+		curr, max = 0, len(blob) / self.MAXUNPADDEDTREZORENCRYPTSIZE
+		splits=[blob[x:x+self.MAXUNPADDEDTREZORENCRYPTSIZE] for x in range(0,len(blob),self.MAXUNPADDEDTREZORENCRYPTSIZE)]
 		for junk in splits:
 			padded = Padding(BLOCKSIZE).pad(junk)
-			encrypted += self.trezor.encrypt_keyvalue(Magic.groupNode, ugroup, padded, ask_on_encrypt=False, ask_on_decrypt=first, iv=rndBlock)
+			try:
+				encrypted += self.trezor.encrypt_keyvalue(Magic.levelTwoNode, ukeystring, padded, ask_on_encrypt=False, ask_on_decrypt=first, iv=rndBlock)
+			except Exception, e:
+				self.logger.critical('Trezor failed. (%s)', e)
+				raise
 			first = False
+			curr += 1
+			if self.logger.getEffectiveLevel() == logging.DEBUG:
+				print >> sys.stderr, "\rencrypting block", curr, "of", max,
+		if self.logger.getEffectiveLevel() == logging.DEBUG:
+			print >> sys.stderr, "done"
 		ret = rndBlock + encrypted
-		self.logger.debug("Trezor encryption: plain-size = %d, encrypted-size = %d", len(password),  len(encrypted))
+		self.logger.debug("Trezor encryption: plain-size = %d, encrypted-size = %d", len(blob),  len(ret))
+		self.logger.debug('time leaving encryptOnTrezorDevice: %s', datetime.datetime.now())
 		return ret
 
-	def decryptPassword(self, encryptedPassword, groupName):
+	def decryptOnTrezorDevice(self, encryptedblob, keystring):
 		"""
-		Decrypt a password. First block is IV. After decryption strips PKCS#5 padding.
+		Decrypt a blob. First block is IV. After decryption strips PKCS#5 padding.
 
-		@param groupName key that will be shown to user on Trezor and
-			was used to encrypt the password. A string in utf-8.
+		@param keystring: key that will be shown to user on Trezor and
+			was used to encrypt the blob. A string in utf-8.
 		"""
-		ugroup = groupName.decode("utf-8")
-		iv, encryptedPassword = encryptedPassword[:BLOCKSIZE], encryptedPassword[BLOCKSIZE:]
+		if (len(encryptedblob) > 8388608): # 8M+ and -2 option
+			self.logger.warning("This will take more than 10 minutes. Be ready to wait! \
+				Decrypting each Megabyte on the Trezor (model 1) takes about 75 seconds, \
+				or 0.8MB/min. This file will take about %d minutes. If you want to \
+				en/decrypt fast the next time around, remove the `-2` or `--twice` \
+				option when you encrypt a file.", len(encryptedblob) / 819200)
+		self.logger.debug('time entering decryptOnTrezorDevice: %s', datetime.datetime.now())
+		ukeystring = keystring.decode("utf-8")
+		iv, encryptedblob = encryptedblob[:BLOCKSIZE], encryptedblob[BLOCKSIZE:]
 		# we junk the input, decrypt and reassemble the plaintext
-		password = ""
+		curr, max = 0, len(encryptedblob) / self.MAXPADDEDTREZORENCRYPTSIZE
+		blob = ""
 		first = True
-		self.logger.debug("Press confirm on Trezor device for second level file decryption (if necessary).")
-		splits=[encryptedPassword[x:x+self.MAXPADDEDTREZORENCRYPTSIZE] for x in range(0,len(encryptedPassword),self.MAXPADDEDTREZORENCRYPTSIZE)]
+		self.logger.debug("Press confirm on Trezor device for second level file decryption on Trezor device itself (if necessary).")
+		self.logger.debug("Trezor decryption: encrypted-size = %d", len(encryptedblob))
+		splits=[encryptedblob[x:x+self.MAXPADDEDTREZORENCRYPTSIZE] for x in range(0,len(encryptedblob),self.MAXPADDEDTREZORENCRYPTSIZE)]
 		for junk in splits:
-			plain = self.trezor.decrypt_keyvalue(Magic.groupNode, ugroup, junk, ask_on_encrypt=False, ask_on_decrypt=first, iv=iv)
+			try:
+				plain = self.trezor.decrypt_keyvalue(Magic.levelTwoNode, ukeystring, junk, ask_on_encrypt=False, ask_on_decrypt=first, iv=iv)
+			except Exception, e:
+				self.logger.critical('Trezor failed. (%s)', e)
+				raise
 			first = False
-			password += Padding(BLOCKSIZE).unpad(plain)
-		if len(password) == 0:
+			blob += Padding(BLOCKSIZE).unpad(plain)
+			curr += 1
+			if self.logger.getEffectiveLevel() == logging.DEBUG:
+				print >> sys.stderr, "\rdecrypting block", curr, "of", max,
+		if self.logger.getEffectiveLevel() == logging.DEBUG:
+			print >> sys.stderr, "done"
+		self.logger.debug("Trezor decryption: encrypted-size = %d, plain-size = %d", len(encryptedblob),  len(blob))
+		if len(blob) == 0:
 			raise ValueError("Decrypting data failed. Wrong Trezor device?")
-		return password
+		self.logger.debug('time leaving decryptOnTrezorDevice: %s', datetime.datetime.now())
+		return blob

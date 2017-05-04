@@ -23,24 +23,16 @@ class Magic(object):
 	hdr = u("!I", headerStr)
 
 	# first level encryption
-	unlockNode = [hdr, u("!I", "ULCK")] # unlock key for first level AES encryption
-	unlockKey = "Decrypt file for first time?" # string to derive wrapping key from
+	levelOneNode = [hdr, u("!I", "DEC1")] # unlock key for first level AES encryption, key from Trezor, en/decryption on PC
+	levelOneKey = "Decrypt file for first time?" # string to derive wrapping key from
 
 	# second level encryption
-	levelTwoNode = [hdr, u("!I", "DEC2")] # second level AES encryption
+	levelTwoNode = [hdr, u("!I", "DEC2")] # second level AES encryption, de/encryption on trezor device
 	levelTwoKey = "Decrypt file for second time?" # string to derive wrapping key from
 
 	# only used for filename encryption (no confirm button click desired)
 	fileNameNode = [hdr, u("!I", "FLNM")] # filename encryption for filename obfuscation
 	fileNameKey = "Decrypt filename only?" # string to derive wrapping key from
-
-	#unlockNode = [hdr, u("!I", "ULCK")] # for unlocking wrapped AES-CBC key
-	#groupNode  = [hdr, u("!I", "GRUP")] # for generating keys for individual password groups
-	#the unlock and backup key is written in this weird way to fit display nicely
-	#unlockKey = "Decrypt master  key?" # string to derive wrapping key from
-
-	#backupNode = [hdr, u("!I", "BKUP")] # for unlocking wrapped backup private RSA key
-	#backupKey = "Decrypt backup  key?" # string to derive backup wrapping key from
 
 class Padding(object):
 	"""

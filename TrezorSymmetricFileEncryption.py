@@ -15,9 +15,9 @@ import logging
 import os.path
 import csv
 import time
-import mmap
 import traceback
 import re
+import datetime
 
 from PyQt4 import QtGui, QtCore
 from PyQt4.QtCore import QTimer
@@ -166,7 +166,9 @@ class Settings(object):
 		self.EArg = False
 		self.OArg = False
 		self.DArg = False
+		self.MArg = False
 		self.NArg = False
+		self.XArg = False # -2, --twice
 		self.PArg = None
 		self.inputFiles = [] # list of input filenames
 
@@ -177,7 +179,9 @@ class Settings(object):
 		logger.debug("self.EArg = %s", self.EArg)
 		logger.debug("self.OArg = %s", self.OArg)
 		logger.debug("self.DArg = %s", self.DArg)
+		logger.debug("self.MArg = %s", self.MArg)
 		logger.debug("self.NArg = %s", self.NArg)
+		logger.debug("self.XArg = %s", self.XArg)
 		logger.debug("self.PArg = %s", self.PArg)
 		logger.debug("self.inputFiles = %s", str(self.inputFiles))
 
@@ -191,7 +195,7 @@ def showGui(trezor, settings):
 	will be cached until disconnect.
 
 	@param trezor: Trezor client
-	@param settings: Settings object to store password database location
+	@param settings: Settings object to store command line arguments or items selected in GUI
 	"""
 	dialog = Dialog()
 	dialog.setVersion(basics.TSFEVERSION)
@@ -220,17 +224,22 @@ def showGui(trezor, settings):
 	settings.printSettings()
 
 def usage():
-	print """TrezorSymmetricFileEncryption.py [-v] [-h] [-l <level>] [-n] [-t] [-o | -e | -d] [-p <passphrase>] <files>
+	print """TrezorSymmetricFileEncryption.py [-v] [-h] [-l <level>] [-t] [-2] [-o | -e | -d | -n] [-p <passphrase>] <files>
 		-v, --verion          ... optional ... print the version number
 		-h, --help            ... optional ... print short help text
 		-l, --logging         ... optional ... set logging level, integer from 1 to 5, 1=full logging, 5=no logging
 		-t, --terminal        ... optional ... run in the terminal, except for PIN query
 	                                           and possibly a Passphrase query this avoids the GUI
-		-n, --nameonly        ... optional ... just decrypt an obfuscated filename,
-	                                           does not decrypt the file itself, incompaible with `-o` and `-e`
+		-m, --encnameonly     ... optional ... just encrypt the plaintext filename, show what the obfuscated filename would be
+	                                           does not encrypt the file itself, incompaible with `-d` and `-n`
+		-n, --decnameonly     ... optional ... just decrypt the obfuscated filename,
+	                                           does not decrypt the file itself, incompaible with `-o`, `-e`, and `-m`
 		-d, --decrypt         ... optional ... decrypt file
 		-e, --encrypt         ... optional ... encrypt file and keep plaintext file name for output (appends .tsfe suffix)
 		-o, --obfuscatedencrypt . optional ... encrypt file and obfuscate file name of output
+		-2, --twice           ... optional ... paranoid mode; encrypt file a second time on the Trezor chip itself;
+                                               only relevant for `-e` and `-o`; ignored in all other cases.
+		                                       Consider filesize: The Trezor chip is slow. 1M takes roughly 75 seconds.
 		-p, --passphrase      ... optional ... master passphrase used for Trezor
 	                                           It is recommended that you do not use this command line option
 	                                           but rather give the passphrase through a small window interaction.
@@ -260,6 +269,10 @@ def usage():
 
 		If you want the output file name to be obfuscated you
 		must use the `-o` (obfuscate) flag or select that option in the GUI.
+
+		Be aware of computation time and file sizes when you use `-2` option.
+		Encrypting on the Trezor takes time: 1M roughtly 75sec. 50M about 1h.
+		Without `-2` a 1G file takes roughly 15 seconds.
 		"""
 
 def printVersion():
@@ -267,7 +280,7 @@ def printVersion():
 
 def parseArgs(argv, settings):
 	try:
-		opts, args = getopt.getopt(argv,"vhl:tndeop:",["version","help","logging=","terminal","nameonly","decrypt","encrypt","obfuscatedencrypt","passphrase="])
+		opts, args = getopt.getopt(argv,"vhl:tmn2deop:",["version","help","logging=","terminal","encnameonly","decnameonly","twice","decrypt","encrypt","obfuscatedencrypt","passphrase="])
 	except getopt.GetoptError, e:
 		msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Critical, "Wrong arguments", "Error: " + str(e))
 		msgBox.exec_()
@@ -286,7 +299,9 @@ def parseArgs(argv, settings):
 			loglevelused = True
 		elif opt in ("-t", "--terminal"):
 			settings.TArg = True
-		elif opt in ("-n", "--nameonly"):
+		elif opt in ("-m", "--encnameonly"):
+			settings.MArg = True
+		elif opt in ("-n", "--decnameonly"):
 			settings.NArg = True
 		elif opt in ("-d", "--decrypt"):
 			settings.DArg = True
@@ -294,7 +309,9 @@ def parseArgs(argv, settings):
 			settings.EArg = True
 		elif opt in ("-o", "--obfuscatedencrypt"):
 			settings.OArg = True
-		elif opt in ("-p", "--password"):
+		elif opt in ("-2", "--twice"):
+			settings.XArg = True
+		elif opt in ("-p", "--passphrase"):
 			settings.PArg = arg
 
 	if loglevelused:
@@ -325,19 +342,32 @@ def parseArgs(argv, settings):
 			msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Critical, "Wrong arguments", "Error: You cannot specify both decrypt and encrypt. It is one or the other. Either -d or -e or -o.")
 			msgBox.exec_()
 		sys.exit(2)
-	if (settings.NArg and settings.EArg) or (settings.NArg and settings.OArg):
+	if (settings.MArg and settings.DArg) or (settings.MArg and settings.NArg):
 		if settings.TArg:
-			logger.critical("You cannot specify both \"decrypt filename\" and \"encrypt file\". It is one or the other. Don't use -n when using -e or -o, and vice versa.")
+			logger.critical("You cannot specify both \"encrypt filename\" and \"decrypt file(name)\". It is one or the other. Don't use -m when using -d or -n (and vice versa).")
 		else:
-			msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Critical, "Wrong arguments", "Error: You cannot specify both \"decrypt filename\" and \"encrypt file\". It is one or the other. Don't use -n when using -e or -o, and vice versa.")
+			msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Critical, "Wrong arguments", "Error: You cannot specify both \"encrypt filename\" and \"decrypt file(name)\". It is one or the other. Don't use -m when using -d or -n (and vice versa).")
 			msgBox.exec_()
 		sys.exit(2)
+	if (settings.NArg and settings.EArg) or (settings.NArg and settings.OArg) or (settings.NArg and settings.MArg):
+		if settings.TArg:
+			logger.critical("You cannot specify both \"decrypt filename\" and \"encrypt file(name)\". It is one or the other. Don't use -n when using -e, -o, or -m (and vice versa).")
+		else:
+			msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Critical, "Wrong arguments", "Error: You cannot specify both \"decrypt filename\" and \"encrypt file(name)\". It is one or the other. Don't use -n when using -e, -o, or -m (and vice versa).")
+			msgBox.exec_()
+		sys.exit(2)
+	if settings.DArg or settings.NArg or settings.MArg:
+		settings.XArg = False # X is relevant only when -e or -o is set
 	if settings.EArg and settings.OArg:
 		settings.EArg = False # if both E and O are set we default to O
+	if settings.MArg:
+		settings.EArg = False
+		settings.OArg = False
 	if settings.NArg:
 		settings.DArg = False
 	settings.inputFiles = args
 	logger.debug("Specified files are: %s", str(args))
+	settings.printSettings()
 
 def analyzeFilename(inputFile):
 	"""
@@ -368,86 +398,93 @@ def analyzeFilename(inputFile):
 		else:
 			return("e")
 
-def decryptFile(inputFile, fileMap, nameOnly):
+def decryptFileNameOnly(inputFile, fileMap):
+	"""
+	Decrypt a filename.
+	If it ends with .tsfe then the filename is plain text
+	Otherwise the filename is obfuscated.
+
+	@param inputFile: filename
+	"""
+	logger.debug("Decrypting filename %s", inputFile)
+	originalFilename = inputFile
+	head, tail = os.path.split(inputFile)
+
+	if tail.endswith(basics.TSFEFILEEXT):
+		isObfuscated = False
+		inputFile = inputFile[:-len(basics.TSFEFILEEXT)]
+	else:
+		isObfuscated = True
+		inputFile = os.path.join(head, fileMap.deobfuscateFilename(tail))
+
+	if not isObfuscated:
+		if settings.TArg:
+			logger.warning("Filename/path %s is already in plaintext.", inputFile)
+		else:
+			msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Information, "Filename deobfuscation", "Info: Filename/path of \"%s\" is already in plaintext." % (inputFile))
+			msgBox.exec_()
+	else:
+		if settings.TArg:
+			print("Plaintext filename/path of \"%s\" is \"%s\"." % (originalFilename, inputFile))
+		else:
+			msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Information, "Filename deobfuscation", "Info: Plaintext filename/path of \"%s\" is \"%s\"." % (originalFilename, inputFile))
+			msgBox.exec_()
+	return
+
+def decryptFile(inputFile, fileMap):
 	"""
 	Decrypt a file.
 	If it ends with .tsfe then the filename is plain text
 	Otherwise the filename is obfuscated.
 
-	@param inputFile: filename
-	@param nameOnly:	bool, if True only the filename will be decrypted (should be an obfuscated filename), if false the whole file will be decrypted
+	@param inputFile: filename of encrypted file
 	"""
-	logger.debug("Decrypting file %s", inputFile)
-	originalFilename = inputFile
+	fileMap.createDecFile(inputFile)
+
+def encryptFileNameOnly(inputFile, fileMap):
+	"""
+	Encrypt a filename.
+	Show only what the obfuscated filename would be, without encrypting the file
+	"""
+	logger.debug("Encrypting filename %s", inputFile)
+
 	head, tail = os.path.split(inputFile)
 
-	if tail.endswith(basics.TSFEFILEEXT):
-		inputFile = inputFile[:-len(basics.TSFEFILEEXT)]
-		isObfuscated = False
-	else:
-		isObfuscated = True
-		inputFile = os.path.join(head, fileMap.deobfuscateFilename(tail))
-
-	if nameOnly:
-		if not isObfuscated:
-			if settings.TArg:
-				logger.warning("Filename/path %s is already in plaintext.", inputFile)
-			else:
-				msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Information, "Filename deobfuscation", "Info: Filename/path of \"%s\" is already in plaintext." % (plaintextFilename))
-				msgBox.exec_()
+	if analyzeFilename(inputFile) == "d":
+		if settings.TArg:
+			logger.warning("Filename/path \"%s\" looks like an encrypted file. Why would you encrypt its filename? This looks strange.", inputFile)
 		else:
-			if settings.TArg:
-				print("Plaintext filename/path of \"%s\" is \"%s\"." % (originalFilename, inputFile))
-			else:
-				msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Information, "Filename deobfuscation", "Info: Plaintext filename/path of \"%s\" is \"%s\"." % (originalFilename, inputFile))
-				msgBox.exec_()
-		return
+			msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Warning, "Filename obfuscation", "Info: Filename/path \"%s\" looks like an encrypted file. Why would you encrypt its filename? This looks strange." % (inputFile))
+			msgBox.exec_()
 
-	# decrypt
-	fileMap.load(originalFilename)
-	logger.debug("Decryption trying to write to file %s.",inputFile)
+	obfFileName = os.path.join(head, fileMap.obfuscateFilename(tail))
 
-	if os.path.isfile(inputFile):
-		logger.warning("File %s exists and decrytion will overwrite it.", inputFile)
-	if not os.access(inputFile, os.W_OK):
-		logger.error("File %s cannot be written. No write permissions. Skipping it.", inputFile)
-		return
+	if settings.TArg:
+		# Do not modify or remove the next line.
+		# The test harness, the test shell script requires it.
+		print("Obfuscated filename/path of \"%s\" is \"%s\"." % (inputFile, obfFileName))
+	else:
+		msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Information, "Filename obfuscation", "Info: Obfuscated filename/path of \"%s\" is \"%s\"." % (inputFile, obfFileName))
+		msgBox.exec_()
+	return
 
-	with open(inputFile, 'w+b') as f:
-		s = len(fileMap.blob)
-		f.write(fileMap.blob)
-		if f.tell() != s:
-			raise IOError("File IO problem - not enough data written")
-		logger.debug("Decryption wrote %d bytes to file %s.",s,inputFile)
-		f.flush()
-		f.close()
-
-def encryptFile(inputFile, fileMap, obfuscate):
+def encryptFile(inputFile, fileMap, obfuscate, twice=False):
 	"""
 	Encrypt a file.
-	Keep the output filename in plain text and add .tsfe
+	if obfuscate == false then keep the output filename in plain text and add .tsfe
 
 	@param inputFile: filename
 	@param fileMap
 	@param obfuscate: bool to indicate if an obfuscated filename (True) is desired or a plaintext filename (False)
 	"""
 	logger.debug("Encrypting file %s", inputFile)
-	with open(inputFile, 'rb') as f:
-		# Size 0 will read the ENTIRE file into memory!
-		m = mmap.mmap(f.fileno(), 0, prot=mmap.PROT_READ) #File is open read-only
-		s = m.size()
-		fileMap.blob = m.read(s)
-		if len(fileMap.blob) != s:
-			raise IOError("File IO problem - not enough data read")
-		logger.debug("Read %d bytes from file %s.",s,inputFile)
-		# encrypt
-		rng = Random.new()
-		fileMap.outerKey = rng.read(file_map.KEYSIZE)
-		fileMap.versionSw = basics.TSFEVERSION
-		fileMap.noOfEncryptions = 1
-		fileMap.save(inputFile, obfuscate)
-		m.close()
-		f.close()
+	if (os.path.getsize(inputFile) > 8388608) and twice: # 8M+ and -2 option
+		if settings.TArg:
+			logger.warning("This will take more than 10 minutes. Are you sure you want to wait? En/decrypting each Megabyte on the Trezor (model 1) takes about 75 seconds, or 0.8MB/min. The file \"%s\" would take about %d minutes. If you want to en/decrypt fast remove the `-2` or `--twice` option.", inputFile, os.path.getsize(inputFile) / 819200)
+		else:
+			msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Warning, "Filename obfuscation", "Info: This will take more than 10 minutes. Are you sure you want to wait? En/decrypting each Megabyte on the Trezor (model 1) takes about 75 seconds, or 0.8MB/min. The file \"%s\" would take about %d minutes. If you want to en/decrypt fast remove the `-2` or `--twice` option." % (inputFile, os.path.getsize(inputFile) / 819200))
+			msgBox.exec_()
+	fileMap.createEncFile(inputFile, obfuscate, twice)
 
 def convertFile(inputFile, fileMap):
 	"""
@@ -457,27 +494,31 @@ def convertFile(inputFile, fileMap):
 	"""
 	if settings.DArg:
 		# decrypt by choice
-		decryptFile(inputFile, fileMap, False)
+		decryptFile(inputFile, fileMap)
+	elif settings.MArg:
+		# encrypt (name only) by choice
+		encryptFileNameOnly(inputFile, fileMap)
 	elif settings.NArg:
 		# decrypt (name only) by choice
-		decryptFile(inputFile, fileMap, True)
+		decryptFileNameOnly(inputFile, fileMap)
 	elif settings.OArg:
 		# encrypt and obfuscate by choice
-		encryptFile(inputFile, fileMap, True)
+		encryptFile(inputFile, fileMap, True, settings.XArg)
 	elif settings.EArg:
 		# encrypt by choice
-		encryptFile(inputFile, fileMap, False)
+		encryptFile(inputFile, fileMap, False, settings.XArg)
 	else:
 		hint = analyzeFilename(inputFile)
 		if hint == "d":
 			# decrypt by default
-			decryptFile(inputFile, fileMap, False)
+			decryptFile(inputFile, fileMap)
 		else:
 			# encrypt by default
-			encryptFile(inputFile, fileMap, False)
+			encryptFile(inputFile, fileMap, False, settings.XArg)
 
 
 def doWork(trezor, settings, fileMap):
+	logger.debug('time entering doWork: %s', datetime.datetime.now())
 	for inputFile in settings.inputFiles:
 		logger.debug("Working on file: %s", inputFile)
 		if not os.path.isfile(inputFile):
@@ -487,6 +528,7 @@ def doWork(trezor, settings, fileMap):
 				logger.error("%s cannot be read. No read permissions. Skipping it.", inputFile)
 			else:
 				convertFile(inputFile, fileMap)
+	logger.debug('time leaving doWork: %s', datetime.datetime.now())
 
 # root
 
