@@ -50,18 +50,25 @@ to store the data size as 8 bytes.
 
 # Performance
 
+## 1-level En/Decryption
+
 AES is very fast.
 Most files take less than a seconds but depends on disk speed, CPU, etc.
-Encrypting/decrypting a 2G file took about 15 sec on a computer with a very slow disk but fast CPU.
+Encrypting/decrypting a 2G file with 1-level en/decryption took about 15 sec on a computer with a very slow disk but fast CPU.
 Encryption time and decryption time are usually the same.
+
+## 2-level En/decryption
+
+The Trezor chip is slow. It takes the Trezor (model 1) device about  75 seconds to en/decrypt 1M. In other words, it can do 0.8MB/min. E.g. for a 20MB file that are 25 minutes.
+50MB in about 1 hour.
 
 # To-do list
 
 - [x] file obfuscation
-- [ ] inner, 2-nd round encryption, new GUI button for it
+- [x] inner, 2-nd round encryption, new GUI button for it
 - [x] add icon to PIN and passphrase GUIs
-- [ ] add screenshots to README.md
-- [ ] screenshots of v0.2alpha
+- [x] add screenshots to README.md
+- [x] screenshots of v0.2alpha
 - [x] make the image smaller on main window
-- [ ] more Testing
-- [ ] get help with getting the word out, anyone wants to spread hte word on Twitter, Reddit, with Trezor, etc.?
+- [x] more Testing
+- [ ] get help with getting the word out, anyone wants to spread the word on Twitter, Reddit, with Trezor, Facebook, etc.?

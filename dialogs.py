@@ -44,8 +44,11 @@ class Dialog(QtGui.QDialog, Ui_Dialog):
 			<b>Welcome to TrezorSymmetricFileEncryption. </b></p>
 			<p style="font-size:11pt;">This is version
 			"""
-		displayHtmlText2 = """.<p>
-			You need to choose a master passphrase that will be used as a Trezor passphrase to encrypt and decrypt files. If forgotten, there's only bruteforcing left. You may leave it empty.</p>
+		displayHtmlText2 = """.
+			<p>En/decrypting once is fast. En/decrypting twice is slow on large files.
+			<p>You need to choose a master passphrase that will be used as a
+			Trezor passphrase to encrypt and decrypt files.
+			If forgotten, there's only bruteforcing left. You may leave it empty.</p>
 			"""
 		displayHtmlText3 = "</body></html>"
 		self.textBrowser.setHtml(s2q(displayHtmlText1 + self.version + displayHtmlText2 + extradescription + displayHtmlText3))
@@ -131,7 +134,7 @@ class Dialog(QtGui.QDialog, Ui_Dialog):
 	def validate(self):
 		"""
 		Enable OK button only if both master and backup are repeated
-		without typo and some password file is selected and
+		without typo and some file is selected and
 		exactly a single decrypt/encrypt option from the radio buttons is set.
 		"""
 		same = self.pw1() == self.pw2()
@@ -144,11 +147,10 @@ class Dialog(QtGui.QDialog, Ui_Dialog):
 
 	def selectFile(self):
 		"""
-		Show file dialog and return file user chose to store the
-		encrypted password database.
+		Show file dialog and return file(s) user has chosen.
 		"""
 		path = QtCore.QDir.currentPath()
-		dialog = QtGui.QFileDialog(self, "Select password database file",
+		dialog = QtGui.QFileDialog(self, "Select file(s)",
 			path, "(*)")
 		dialog.setFileMode(QtGui.QFileDialog.ExistingFiles);
 		dialog.setAcceptMode(QtGui.QFileDialog.AcceptOpen)

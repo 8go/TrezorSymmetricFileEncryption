@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>600</width>
-    <height>660</height>
+    <height>720</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -103,14 +103,28 @@ p, li { white-space: pre-wrap; }
    <item>
     <widget class="QRadioButton" name="radioButton1">
      <property name="text">
-      <string>Encrypt file and leave filename in plaintext</string>
+      <string>Encrypt file once and leave filename in plaintext</string>
      </property>
     </widget>
    </item>
    <item>
     <widget class="QRadioButton" name="radioButton2">
      <property name="text">
-      <string>Encrypt file and obfuscate filename</string>
+      <string>Encrypt file once and obfuscate filename</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QRadioButton" name="radioButton5">
+     <property name="text">
+      <string>Encrypt file twice and leave filename in plaintext</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QRadioButton" name="radioButton6">
+     <property name="text">
+      <string>Encrypt file twice and obfuscate filename</string>
      </property>
     </widget>
    </item>
