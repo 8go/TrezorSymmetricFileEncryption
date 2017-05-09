@@ -7,7 +7,7 @@ TSFEFILEEXT = ".tsfe"
 TSFEFILEFORMATVERSION = 1
 
 # Name of software version, must be less than 16 long
-TSFEVERSION = "v0.2-beta"
+TSFEVERSION = "v0.3-beta"
 
 # default log level
 LOGGINGLEVEL = logging.INFO # CRITICAL, ERROR, WARNING, INFO, DEBUG

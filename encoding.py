@@ -3,6 +3,7 @@ import struct
 from PyQt4 import QtCore
 
 import os
+import os.path
 import random
 
 def q2s(s):
@@ -23,16 +24,18 @@ class Magic(object):
 	hdr = u("!I", headerStr)
 
 	# first level encryption
-	levelOneNode = [hdr, u("!I", "DEC1")] # unlock key for first level AES encryption, key from Trezor, en/decryption on PC
+	# unlock key for first level AES encryption, key from Trezor, en/decryption on PC
+	levelOneNode = [hdr, u("!I", "DEC1")]
 	levelOneKey = "Decrypt file for first time?" # string to derive wrapping key from
 
 	# second level encryption
-	levelTwoNode = [hdr, u("!I", "DEC2")] # second level AES encryption, de/encryption on trezor device
-	levelTwoKey = "Decrypt file for second time?" # string to derive wrapping key from
+	# second level AES encryption, de/encryption on trezor device
+	levelTwoNode = [hdr, u("!I", "DEC2")]
+	levelTwoKey = "Decrypt file for second time?"
 
 	# only used for filename encryption (no confirm button click desired)
 	fileNameNode = [hdr, u("!I", "FLNM")] # filename encryption for filename obfuscation
-	fileNameKey = "Decrypt filename only?" # string to derive wrapping key from
+	fileNameKey = "Decrypt filename only?"
 
 class Padding(object):
 	"""
@@ -54,11 +57,11 @@ class PaddingHomegrown(object):
 	Pad filenames that are already base64 encoded. Must have length of multiple of 4.
 	Base64 always have a length of mod 4, padded with =
 	Examples: YQ==, YWI=, YWJj, YWJjZA==, YWJjZGU=, YWJjZGVm, ...
-	On padding we remove the = pad, then we pad to a mod 16.
+	On howngrown padding we remove the = pad, then we pad to a mod 16.
 	If length is already mod 16, it will be padded with 16 chars. So in all cases we pad.
-	The last letter always replresents how many chars have been padded (A=1, ..., P=16).
+	The last letter always represents how many chars have been padded (A=1, ..., P=16).
 	The last letter is out of the alphabet A..P.
-	The padded letters before the last letter are random in the a..zA..Z alphabet.
+	The padded letters before the last letter are pseudo-random in the a..zA..Z alphabet.
 	"""
 
 	def __init__(self):
@@ -69,7 +72,8 @@ class PaddingHomegrown(object):
 		"""
 		input must be in valid base64 format
 		"""
-		# the randomness can be poor, it does not matter, it is just used for buffer letters in the file name
+		# the randomness can be poor, it does not matter,
+		# it is just used for buffer letters in the file name
 		urandom_entropy = os.urandom(64)
 		random.seed(urandom_entropy)
 		# remove the base64 buffer char =
