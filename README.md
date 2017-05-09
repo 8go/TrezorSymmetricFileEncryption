@@ -43,7 +43,7 @@ Note that it is software, currently in alpha stage.
 
 Below a sample screenshot. More screenshots [here](https://github.com/8go/TrezorSymmetricFileEncryption/tree/master/screenshots).
 
-![screenshot](https://github.com/8go/TrezorSymmetricFileEncryption/blob/master/screenshots/screenshot_TrezorSymmetricFileEncryption_mainWindow1.version02b.png)
+![screenshot](https://github.com/8go/TrezorSymmetricFileEncryption/blob/master/screenshots/screenshot_TrezorSymmetricFileEncryption_mainWindow2.version03b.png)
 
 # Build and runtime requirements
 
@@ -75,34 +75,50 @@ Run-time command line options are
 
 ```
 TrezorSymmetricFileEncryption.py [-v] [-h] [-l <level>] [-t] [-2] [-o | -e | -d | -n] [-p <passphrase>] <files>
-    -v, --verion          ... optional ... print the version number
-    -h, --help            ... optional ... print short help text
-    -l, --logging         ... optional ... set logging level, integer from 1 to 5, 1=full logging, 5=no logging
-    -t, --terminal        ... optional ... run in the terminal, except for PIN query
-                                           and possibly a Passphrase query this avoids the GUI
-    -m, --encnameonly     ... optional ... just encrypt the plaintext filename, show what the obfuscated filename would be
-                                           does not encrypt the file itself, incompaible with `-d` and `-n`
-    -n, --decnameonly     ... optional ... just decrypt the obfuscated filename,
-                                           does not decrypt the file itself, incompaible with `-o`, `-e`, and `-m`
-    -d, --decrypt         ... optional ... decrypt file
-    -e, --encrypt         ... optional ... encrypt file and keep plaintext file name for output (appends .tsfe suffix)
-    -o, --obfuscatedencrypt . optional ... encrypt file and obfuscate file name of output
-    -2, --twice           ... optional ... paranoid mode; encrypt file a second time on the Trezor chip itself;
-                                           only relevant for `-e` and `-o`; ignored in all other cases.
-                                           Consider filesize: The Trezor chip is slow. 1M takes roughly 75 seconds.
-    -p, --passphrase      ... optional ... master passphrase used for Trezor
-                                           It is recommended that you do not use this command line option
-                                           but rather give the passphrase through a small window interaction.
-    <files>               ...              one or multiple files to be encrypted or decrypted
+    -v, --verion
+            print the version number
+    -h, --help
+            print short help text
+    -l, --logging
+            set logging level, integer from 1 to 5, 1=full logging, 5=no logging
+    -t, --terminal
+            run in the terminal, except for a possible PIN query
+            and a Passphrase query this avoids the GUI
+    -m, --encnameonly
+            just encrypt the plaintext filename, show what the obfuscated
+            filename would be; does not encrypt the file itself;
+            incompaible with `-d` and `-n`
+    -n, --decnameonly
+            just decrypt the obfuscated filename;
+            does not decrypt the file itself;
+            incompaible with `-o`, `-e`, and `-m`
+    -d, --decrypt
+            decrypt file
+    -e, --encrypt
+            encrypt file and keep output filename as plaintext
+            (appends .tsfe suffix to input file)
+    -o, --obfuscatedencrypt
+            encrypt file and obfuscate output file name
+    -2, --twice
+            paranoid mode; encrypt file a second time on the Trezor chip itself;
+            only relevant for `-e` and `-o`; ignored in all other cases.
+            Consider filesize: The Trezor chip is slow. 1M takes roughly 75 seconds.
+    -p, --passphrase
+            master passphrase used for Trezor.
+            It is recommended that you do not use this command line option
+            but rather give the passphrase through a small window interaction.
+    <files>
+            one or multiple files to be encrypted or decrypted
 
-    By default it will use a GUI.
+    All arguments are optional.
 
-    You can force it to avoid the GUI by using `-t`, the Terminal mode.
+    All output files are always placed in the same directory as the input files.
+
+    By default the GUI will be used.
+
+    You can avoid the GUI by using `-t`, forcing the Terminal mode.
     If you specify filename, possibly some `-o`, `-e`, or `-d` option, then
     only PIN and Passphrase will be collected through windows.
-
-    Using the GUI has the advantage that no passphrase has to be specified in the command line.
-    So, using the GUI is safer.
 
     Most of the time TrezorSymmetricFileEncryption can detect automatically if
     it needs to decrypt or encrypt by analyzing the given input file name.
@@ -113,16 +129,16 @@ TrezorSymmetricFileEncryption.py [-v] [-h] [-l <level>] [-t] [-2] [-o | -e | -d 
     the wrong encrypt/decrypt operation you can force it to use the right one
     by using either `-e` or `-d` or selecting the appropriate option in the GUI.
 
-    If TrezorSymmetricFileEncryption automatically choses the encryption
-    option for you, it will chose by default the `-e`, and create
-    plaintext encrypted files with an `.tsfe` suffix.
+    If TrezorSymmetricFileEncryption automatically determines
+    that it has to encrypt of file, it will chose by default the
+    `-e` option, and create a plaintext encrypted files with an `.tsfe` suffix.
 
     If you want the output file name to be obfuscated you
     must use the `-o` (obfuscate) flag or select that option in the GUI.
 
     Be aware of computation time and file sizes when you use `-2` option.
     Encrypting on the Trezor takes time: 1M roughtly 75sec. 50M about 1h.
-    Without `-2` a 1G file takes roughly 15 seconds.
+    Without `-2` it is very fast, a 1G file taking roughly 15 seconds.
 ```
 
 # Testing
