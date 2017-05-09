@@ -270,7 +270,7 @@ class Dialog(QtGui.QDialog, Ui_Dialog):
 
 		qFnameList = dialog.selectedFiles() # QStringList
 		self.fileNames = str(qFnameList.join("<join>")).split("<join>") # convert to Py list
-		print "Selected files are: ", self.fileNames
+		self.logger.debug("Selected files are: " + str(self.fileNames))
 		self.setSelectedFile(self.fileNames)
 
 class EnterPinDialog(QtGui.QDialog, Ui_EnterPinDialog):
