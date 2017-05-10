@@ -211,65 +211,36 @@ def parseArgs(argv, settings, logger):
 		try:
 			loglevel = int(loglevelarg)
 		except Exception, e:
-			if settings.TArg:
-				logger.critical("Logging level not specified correctly. "
-					"Must be integer between 1 and 5. (%s)", loglevelarg)
-			else:
-				msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Critical,
-					"Wrong arguments",
-					"Error: Logging level not specified correctly. "
-					"Must be integer between 1 and 5.")
-				msgBox.exec_()
-			sys.exit()
+			reportLogging("Logging level not specified correctly. "
+				"Must be integer between 1 and 5. (%s)" % loglevelarg, logging.CRITICAL,
+				"Wrong arguments", settings, logger)
+			sys.exit(18)
 		if loglevel > 5 or loglevel < 1:
-			if settings.TArg:
-				logger.critical("Logging level not specified correctly. "
-					"Must be integer between 1 and 5. (%s)", loglevelarg)
-			else:
-				msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Critical,
-					"Wrong arguments",
-					"Error: Logging level not specified correctly. "
-					"Must be integer between 1 and 5.")
-				msgBox.exec_()
-			sys.exit()
+			reportLogging("Logging level not specified correctly. "
+				"Must be integer between 1 and 5. (%s)" % loglevelarg, logging.CRITICAL,
+				"Wrong arguments", settings, logger)
+			sys.exit(19)
 		basics.LOGGINGLEVEL = loglevel * 10 # https://docs.python.org/2/library/logging.html#levels
 		logger.setLevel(basics.LOGGINGLEVEL)
 		logger.info('Logging level set to %s (%d).',
 			logging.getLevelName(basics.LOGGINGLEVEL), basics.LOGGINGLEVEL)
 
 	if (settings.DArg and settings.EArg) or (settings.DArg and settings.OArg):
-		if settings.TArg:
-			logger.critical("You cannot specify both decrypt and encrypt. "
-				"It is one or the other. Either -d or -e or -o.")
-		else:
-			msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Critical, "Wrong arguments",
-				"Error: You cannot specify both decrypt and encrypt. "
-				"It is one or the other. Either -d or -e or -o.")
-			msgBox.exec_()
+		reportLogging("You cannot specify both decrypt and encrypt. "
+			"It is one or the other. Either -d or -e or -o.", logging.CRITICAL,
+			"Wrong arguments", settings, logger)
 		sys.exit(2)
 	if (settings.MArg and settings.DArg) or (settings.MArg and settings.NArg):
-		if settings.TArg:
-			logger.critical("You cannot specify both \"encrypt filename\" and "
+		reportLogging("You cannot specify both \"encrypt filename\" and "
 			"\"decrypt file(name)\". It is one or the other. "
-			"Don't use -m when using -d or -n (and vice versa).")
-		else:
-			msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Critical, "Wrong arguments",
-				"Error: You cannot specify both \"encrypt filename\" and "
-				"\"decrypt file(name)\". It is one or the other. "
-				"Don't use -m when using -d or -n (and vice versa).")
-			msgBox.exec_()
+			"Don't use -m when using -d or -n (and vice versa).", logging.CRITICAL,
+			"Wrong arguments", settings, logger)
 		sys.exit(2)
 	if (settings.NArg and settings.EArg) or (settings.NArg and settings.OArg) or (settings.NArg and settings.MArg):
-		if settings.TArg:
-			logger.critical("You cannot specify both \"decrypt filename\" and "
-				"\"encrypt file(name)\". It is one or the other. Don't use "
-				"-n when using -e, -o, or -m (and vice versa).")
-		else:
-			msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Critical,
-				"Wrong arguments", "Error: You cannot specify both \"decrypt "
-				"filename\" and \"encrypt file(name)\". It is one or the other. "
-				"Don't use -n when using -e, -o, or -m (and vice versa).")
-			msgBox.exec_()
+		reportLogging("You cannot specify both \"decrypt filename\" and "
+			"\"encrypt file(name)\". It is one or the other. Don't use "
+			"-n when using -e, -o, or -m (and vice versa).", logging.CRITICAL,
+			"Wrong arguments", settings, logger)
 		sys.exit(2)
 	if settings.DArg or settings.NArg or settings.MArg:
 		settings.XArg = False # X is relevant only when -e or -o is set
@@ -284,7 +255,7 @@ def parseArgs(argv, settings, logger):
 	logger.debug("Specified files are: %s", str(args))
 	settings.printSettings()
 
-def reportLogging(str, level, title, settings, logger, feedback):
+def reportLogging(str, level, title, settings, logger, feedback=None):
 	"""
 	Displays string str depending on scenario:
 	a) in terminal mode: thru logger (except if loglevel == NOTSET)
@@ -295,10 +266,14 @@ def reportLogging(str, level, title, settings, logger, feedback):
 	@param level: log level from DEBUG to CRITICAL
 	@param title: window title text
 	"""
+	if feedback == None:
+		guiExists = False
+	else:
+		guiExists = settings.guiExists
 	if level == logging.NOTSET:
 		if settings.TArg:
 			print str # stdout
-		elif settings.guiExists:
+		elif guiExists:
 			print str # stdout
 			feedback.addFeedback("<br>%s" %	(str))
 		else:
@@ -309,7 +284,7 @@ def reportLogging(str, level, title, settings, logger, feedback):
 	elif level == logging.DEBUG:
 		if settings.TArg:
 			logger.debug(str)
-		elif settings.guiExists:
+		elif guiExists:
 			logger.debug(str)
 			if logger.getEffectiveLevel() <= level:
 				feedback.addFeedback("<br>Debug: %s" %	(str))
@@ -320,7 +295,7 @@ def reportLogging(str, level, title, settings, logger, feedback):
 	elif level == logging.INFO:
 		if settings.TArg:
 			logger.info(str)
-		elif settings.guiExists:
+		elif guiExists:
 			logger.info(str)
 			if logger.getEffectiveLevel() <= level:
 				feedback.addFeedback("<br>Info: %s" %	(str))
@@ -333,7 +308,7 @@ def reportLogging(str, level, title, settings, logger, feedback):
 	elif level == logging.WARN:
 		if settings.TArg:
 			logger.warning(str)
-		elif settings.guiExists:
+		elif guiExists:
 			logger.warning(str)
 			if logger.getEffectiveLevel() <= level:
 				feedback.addFeedback("<br>Warning: %s" %	(str))
@@ -346,27 +321,27 @@ def reportLogging(str, level, title, settings, logger, feedback):
 	elif level == logging.ERROR:
 		if settings.TArg:
 			logger.error(str)
-		elif settings.guiExists:
+		elif guiExists:
 			logger.error(str)
 			if logger.getEffectiveLevel() <= level:
 				feedback.addFeedback("<br>Error: %s" %	(str))
 		else:
 			logger.error(str)
 			if logger.getEffectiveLevel() <= level:
-				msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Error,
+				msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Critical,
 					title, "Error: %s" % (str))
 				msgBox.exec_()
 	elif level == logging.CRITICAL:
 		if settings.TArg:
 			logger.critical(str)
-		elif settings.guiExists:
+		elif guiExists:
 			logger.critical(str)
 			if logger.getEffectiveLevel() <= level:
 				feedback.addFeedback("<br>Critical: %s" %	(str))
 		else:
 			logger.critical(str)
 			if logger.getEffectiveLevel() <= level:
-				msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Ceitical,
+				msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Critical,
 					title, "Critical: %s" % (str))
 				msgBox.exec_()
 
