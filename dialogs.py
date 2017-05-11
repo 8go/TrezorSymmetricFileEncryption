@@ -1,9 +1,10 @@
-from PyQt4 import QtGui, QtCore
-
 import os
 import os.path
 import base64
 import hashlib
+import logging
+
+from PyQt4 import QtGui, QtCore
 
 from ui_trezor_passphrase_dialog import Ui_TrezorPassphraseDialog
 from ui_dialog import Ui_Dialog
@@ -11,7 +12,7 @@ from ui_enter_pin_dialog import Ui_EnterPinDialog
 from ui_trezor_chooser_dialog import Ui_TrezorChooserDialog
 
 from encoding import q2s, s2q
-from processing import processAllFromApply
+from processing import processAllFromApply, reportLogging
 
 class TrezorPassphraseDialog(QtGui.QDialog, Ui_TrezorPassphraseDialog):
 
@@ -79,12 +80,15 @@ class Dialog(QtGui.QDialog, Ui_Dialog):
 		called whenever selected text in textarea is changed
 		"""
 		# self.textBrowser.copy() # copy selected to clipboard
-		# print self.clipboard.text() # print clipboard
+		# reportLogging("Copied text to clipboard: %s" % self.clipboard.text(),
+		#	logging.DEBUG, "Clipboard", self.settings, self.logger)
 		""" empty """
 
 	def copy2Clipboard(self):
 		self.textBrowser.copy() # copy selected to clipboard
-		self.logger.debug("Copied to clipboard: %s", self.clipboard.text()) # print clipboard
+		# This is content from the Status textarea, so no secrets here, we can log it
+		reportLogging("Copied text to clipboard: %s" % self.clipboard.text(), logging.DEBUG,
+			"Clipboard", self.settings, self.logger)
 
 	def setVersion(self, version):
 		self.version = version
@@ -231,14 +235,16 @@ class Dialog(QtGui.QDialog, Ui_Dialog):
 #			feedback = processAllFromApply(self, self.trezor, self.settings, self.fileMap, self.logger) #
 #			self.appendDescription(feedback)
 #		# elif sb == QtGui.QDialogButtonBox.Reset:
-#		#	print('Reset Clicked, quitting now...')
+#		#	reportLogging("Reset Clicked, quitting now...", logging.DEBUG,
+#		#		"UI", self.settings, self.logger)
 
 	def accept(self):
 		"""
-		Apply button was pinpadPressed
+		Apply button was pressed
 		"""
 		if self.validate():
-			self.logger.debug("Apply was called by user request. Start processing now.")
+			reportLogging("Apply was called by user request. Start processing now.",
+				logging.DEBUG, "GUI IO", self.settings, self.logger)
 			feedback = processAllFromApply(self, self.trezor, self.settings, self.fileMap, self.logger) #
 			self.appendDescription(feedback)
 			# move the cursor to the end of the text, scroll to the bottom
@@ -247,7 +253,9 @@ class Dialog(QtGui.QDialog, Ui_Dialog):
 			self.textBrowser.ensureCursorVisible()
 			self.textBrowser.setTextCursor(cursor)
 		else:
-			self.logger.debug("Apply was called by user request. Apply is denied. User input is not valid for processing. Did you select a file?")
+			reportLogging("Apply was called by user request. Apply is denied. "
+				"User input is not valid for processing. Did you select a file?",
+				logging.DEBUG, "GUI IO", self.settings, self.logger)
 
 	# Don't set up a reject() method, it is automatically created.
 	# If created here again it would overwrite the default one
@@ -270,7 +278,8 @@ class Dialog(QtGui.QDialog, Ui_Dialog):
 
 		qFnameList = dialog.selectedFiles() # QStringList
 		self.fileNames = str(qFnameList.join("<join>")).split("<join>") # convert to Py list
-		self.logger.debug("Selected files are: " + str(self.fileNames))
+		reportLogging("Selected files are: %s" % str(self.fileNames),
+			logging.DEBUG, "GUI IO", self.settings, self.logger)
 		self.setSelectedFile(self.fileNames)
 
 class EnterPinDialog(QtGui.QDialog, Ui_EnterPinDialog):

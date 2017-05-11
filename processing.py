@@ -5,17 +5,20 @@ import getopt
 import re
 import datetime
 import traceback
+import os
 import os.path
+import stat
+import base64
+import hashlib
+import filecmp
 
 from PyQt4 import QtCore
 from PyQt4 import QtGui
-
 
 from trezorlib.client import CallException, PinException
 
 from encoding import q2s, s2q
 import basics
-
 
 class Feedback(object):
 	"""
@@ -54,6 +57,8 @@ class Settings(object):
 		self.NArg = False
 		self.XArg = False # -2, --twice
 		self.PArg = None
+		self.SArg = False # Safety check
+		self.WArg = False # Wipe plaintxt after encryption
 		self.inputFiles = [] # list of input filenames
 
 	def printSettings(self):
@@ -68,6 +73,8 @@ class Settings(object):
 		self.logger.debug("self.NArg = %s", self.NArg)
 		self.logger.debug("self.XArg = %s", self.XArg)
 		self.logger.debug("self.PArg = %s", self.PArg)
+		self.logger.debug("self.SArg = %s", self.SArg)
+		self.logger.debug("self.WArg = %s", self.WArg)
 		self.logger.debug("self.inputFiles = %s", str(self.inputFiles))
 
 	def gui2Settings(self, dialog, trezor):
@@ -98,8 +105,42 @@ class Settings(object):
 		dialog.setPw2(self.PArg)
 		self.printSettings()
 
+
+def shred(filename, passes, settings = None, logger = None, feedback = None):
+	"""
+	There is no guarantee that the file will actually be shredded.
+	The OS or the smart disk might buffer it in a cache and
+	data might remain on the physical disk.
+	This is a best effort.
+	"""
+	if not os.path.isfile(filename):
+		raise IOError("Cannot shred, \"%s\" is not a file." % filename)
+
+	ld = os.path.getsize(filename)
+	fh = open(filename,  "w")
+	for _ in range(int(passes)):
+		data = "0" * ld
+		fh.write(data)
+		fh.seek(0,  0)
+	fh.close()
+	fh = open(filename,  "w")
+	fh.truncate(0)
+	fh.close()
+	urandom_entropy = os.urandom(64)
+	randomBin = hashlib.sha256(urandom_entropy).digest()
+	randomB64 = base64.urlsafe_b64encode(randomBin).replace("=", "-")
+	urandom_entropy = os.urandom(64)
+	randomBin = hashlib.sha256(urandom_entropy).digest()
+	randomB64 = randomB64 + base64.urlsafe_b64encode(randomBin).replace("=", "-")
+	os.rename(filename, randomB64)
+	os.remove(randomB64)
+	if settings is not None and logger is not None and feedback is not None:
+		reportLogging("File \"%s\" has been shredded and deleted." % filename,
+			logging.INFO, "File IO", settings, logger, feedback)
+
+
 def usage():
-	print """TrezorSymmetricFileEncryption.py [-v] [-h] [-l <level>] [-t] [-2] [-o | -e | -d | -n] [-p <passphrase>] <files>
+	print """TrezorSymmetricFileEncryption.py [-v] [-h] [-l <level>] [-t] [-2] [-s] [-w] [-o | -e | -d | -n] [-p <passphrase>] <files>
 		-v, --verion
 				print the version number
 		-h, --help
@@ -132,6 +173,15 @@ def usage():
 				master passphrase used for Trezor.
 				It is recommended that you do not use this command line option
 				but rather give the passphrase through a small window interaction.
+		-s, --safety
+				doublechecks the encryption process by decrypting the just
+				encrypted file immediately and comparing it to original file;
+				only relevant for `-e` and `-o`; ignored in all other cases.
+				Primarily useful for testing.
+		-w, --wipe
+				shred the plaintext file after encryption;
+				only relevant for `-e` and `-o`; ignored in all other cases.
+				Use with caution. May be used together with `-s`.
 		<files>
 				one or multiple files to be encrypted or decrypted
 
@@ -164,6 +214,30 @@ def usage():
 		Be aware of computation time and file sizes when you use `-2` option.
 		Encrypting on the Trezor takes time: 1M roughtly 75sec. 50M about 1h.
 		Without `-2` it is very fast, a 1G file taking roughly 15 seconds.
+
+		For safety the file permission of encrypted files is set to read-only.
+
+		Examples:
+		# specify everything in the GUI
+		TrezorSymmetricFileEncryption.py
+
+		# specify everything in the GUI, set logging to verbose Debug level
+		TrezorSymmetricFileEncryption.py -l 1
+
+		# encrypt contract producing contract.doc.tsfe
+		TrezorSymmetricFileEncryption.py contract.doc
+
+		# encrypt contract and obfuscate output producing e.g. TQFYqK1nha1IfLy_qBxdGwlGRytelGRJ
+		TrezorSymmetricFileEncryption.py -o contract.doc
+
+		# decrypt contract producing contract.doc
+		TrezorSymmetricFileEncryption.py contract.doc.tsfe
+
+		# decrypt obfuscated contract producing contract.doc
+		TrezorSymmetricFileEncryption.py TQFYqK1nha1IfLy_qBxdGwlGRytelGRJ
+
+		# shows plaintext name of encrypted file, e.g. contract.doc
+		TrezorSymmetricFileEncryption.py -n TQFYqK1nha1IfLy_qBxdGwlGRytelGRJ
 		"""
 
 def printVersion():
@@ -171,9 +245,9 @@ def printVersion():
 
 def parseArgs(argv, settings, logger):
 	try:
-		opts, args = getopt.getopt(argv,"vhl:tmn2deop:",
+		opts, args = getopt.getopt(argv,"vhl:tmn2swdeop:",
 			["version","help","logging=","terminal","encnameonly","decnameonly",
-			"twice","decrypt","encrypt","obfuscatedencrypt","passphrase="])
+			"twice","safety","decrypt","encrypt","obfuscatedencrypt","passphrase="])
 	except getopt.GetoptError, e:
 		msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Critical, "Wrong arguments", "Error: " + str(e))
 		msgBox.exec_()
@@ -204,6 +278,10 @@ def parseArgs(argv, settings, logger):
 			settings.OArg = True
 		elif opt in ("-2", "--twice"):
 			settings.XArg = True
+		elif opt in ("-s", "--safety"):
+			settings.SArg = True
+		elif opt in ("-w", "--wipe"):
+			settings.WArg = True
 		elif opt in ("-p", "--passphrase"):
 			settings.PArg = arg
 
@@ -252,8 +330,11 @@ def parseArgs(argv, settings, logger):
 	if settings.NArg:
 		settings.DArg = False
 	settings.inputFiles = args
-	logger.debug("Specified files are: %s", str(args))
 	settings.printSettings()
+	if settings.WArg:
+		reportLogging("Warning: The option `--wipe` is set. Plaintext files will "
+			"be shredded after encryption. Abort if you are uncertain or don't understand.", logging.WARNING,
+			"Dangerous arguments", settings, logger)
 
 def reportLogging(str, level, title, settings, logger, feedback=None):
 	"""
@@ -418,6 +499,7 @@ def decryptFileNameOnly(inputFile, settings, fileMap, logger, feedback):
 		reportLogging("Plaintext filename of \"%s\" is \"%s\"." %
 			(tail, ptail), logging.NOTSET,
 			"Filename deobfuscation", settings, logger, feedback)
+	return plaintextfname
 
 def decryptFile(inputFile, settings, fileMap, logger, feedback):
 	"""
@@ -457,6 +539,7 @@ def decryptFile(inputFile, settings, fileMap, logger, feedback):
 		reportLogging("File \"%s\" seems to be already in plaintext. "
 			"Decrypting a plaintext file will fail. Skipping file." % tail,
 			logging.WARNING, "File decryption", settings, logger, feedback)
+		return None
 	else:
 		outputfname = fileMap.createDecFile(inputFile)
 		ohead, otail = os.path.split(outputfname)
@@ -467,6 +550,7 @@ def decryptFile(inputFile, settings, fileMap, logger, feedback):
 		reportLogging("File \"%s\" has been decrypted successfully. "
 			"Decrypted file \"%s\" was produced." % (tail, otail),
 			logging.NOTSET, "File decryption", settings, logger, feedback)
+	return outputfname
 
 def encryptFileNameOnly(inputFile, settings, fileMap, logger, feedback):
 	"""
@@ -494,7 +578,8 @@ def encryptFileNameOnly(inputFile, settings, fileMap, logger, feedback):
 	# Do not modify or remove the next line.
 	# The test harness, the test shell script requires it.
 	reportLogging("Obfuscated filename/path of \"%s\" is \"%s\"." % (tail, otail),
-			logging.NOTSET, "Filename obfuscation", settings, logger, feedback)
+		logging.NOTSET, "Filename obfuscation", settings, logger, feedback)
+	return obfFileName
 
 def encryptFile(inputFile, settings, fileMap, obfuscate, twice, logger, feedback):
 	"""
@@ -549,14 +634,62 @@ def encryptFile(inputFile, settings, fileMap, obfuscate, twice, logger, feedback
 			logging.WARNING, "File enncryption", settings, logger, feedback)
 
 	outputfname = fileMap.createEncFile(inputFile, obfuscate, twice)
+	# for safety make encrypted file read-only
+	os.chmod(outputfname, stat.S_IRUSR)
 	ohead, otail = os.path.split(outputfname)
 	reportLogging("Plaintext file/path: \"%s\"" % inputFile,
 		logging.DEBUG, "File encryption", settings, logger, feedback)
 	reportLogging("Encrypted file/path: \"%s\"" % outputfname,
 		logging.DEBUG, "File encryption", settings, logger, feedback)
-	reportLogging("File \"%s\" has been encrypted successfully. Encrypted "
-		"file \"%s\" was produced." % (tail,otail), logging.NOTSET,
+	if twice:
+		twicetext = " twice"
+	else:
+		twicetext = ""
+	reportLogging("File \"%s\" has been encrypted successfully%s. Encrypted "
+		"file \"%s\" was produced." % (tail,twicetext,otail), logging.NOTSET,
 		"File encryption", settings, logger, feedback)
+	safe = True
+	if settings.SArg:
+		safe = safetyCheck(inputFile, outputfname, fileMap, settings, logger, feedback)
+	if safe and settings.WArg:
+		shred(inputFile, 3, settings, logger, feedback)
+	return outputfname
+
+def	safetyCheck(plaintextFname, encryptedFname, fileMap, settings, logger, feedback):
+	"""
+	check if previous encryption worked by
+	renaming plaintextFname file to plaintextFname.<random number>.org
+	decrypting file named encryptedFname producing new file decryptedFname
+	comparing/diffing decryptedFname to original file now named plaintextFname.<random number>.org
+	removing decrypted file decryptedFname
+	renaming original file plaintextFname.<random number>.org back to input plaintextFname
+
+	@returns True if safety check passes successfuly
+	"""
+	urandom_entropy = os.urandom(64)
+	randomBin = hashlib.sha256(urandom_entropy).digest()
+	# base85 encoding not yet implemented in Python 2.7, (requires Python 3+)
+	# so we use base64 encoding
+	# replace the base64 buffer char =
+	randomB64 = base64.urlsafe_b64encode(randomBin).replace("=", "-")
+	originalFname = plaintextFname + "." + randomB64 + ".orignal"
+	os.rename(plaintextFname, originalFname)
+	decryptedFname = decryptFile(encryptedFname, settings, fileMap, logger, feedback)
+	aresame = filecmp.cmp(decryptedFname, originalFname, shallow=False)
+	ihead, itail = os.path.split(plaintextFname)
+	ohead, otail = os.path.split(encryptedFname)
+	if aresame:
+		reportLogging("Safety check of file \"%s\" (\"%s\") was successful." %
+			(otail,itail),
+			logging.INFO, "File encryption", settings, logger, feedback)
+	else:
+		reportLogging("Fatal error: Safety check of file \"%s\" (\"%s\") failed! "
+			"You must inestigate. Encryption was flawed!" %
+			(otail,itail),
+			logging.CRITICAL, "File encryption", settings, logger, feedback)
+	os.remove(decryptedFname)
+	os.rename(originalFname, plaintextFname)
+	return aresame
 
 def convertFile(inputFile, settings, fileMap, logger, feedback):
 	"""

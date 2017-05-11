@@ -74,7 +74,7 @@ Run:
 Run-time command line options are
 
 ```
-TrezorSymmetricFileEncryption.py [-v] [-h] [-l <level>] [-t] [-2] [-o | -e | -d | -n] [-p <passphrase>] <files>
+TrezorSymmetricFileEncryption.py [-v] [-h] [-l <level>] [-t] [-2] [-s] [-w] [-o | -e | -d | -n] [-p <passphrase>] <files>
     -v, --verion
             print the version number
     -h, --help
@@ -107,6 +107,15 @@ TrezorSymmetricFileEncryption.py [-v] [-h] [-l <level>] [-t] [-2] [-o | -e | -d 
             master passphrase used for Trezor.
             It is recommended that you do not use this command line option
             but rather give the passphrase through a small window interaction.
+    -s, --safety
+            doublechecks the encryption process by decrypting the just
+            encrypted file immediately and comparing it to original file;
+            only relevant for `-e` and `-o`; ignored in all other cases.
+            Primarily useful for testing.
+    -w, --wipe
+            shred the plaintext file after encryption;
+            only relevant for `-e` and `-o`; ignored in all other cases.
+            Use with caution. May be used together with `-s`.
     <files>
             one or multiple files to be encrypted or decrypted
 
@@ -139,6 +148,30 @@ TrezorSymmetricFileEncryption.py [-v] [-h] [-l <level>] [-t] [-2] [-o | -e | -d 
     Be aware of computation time and file sizes when you use `-2` option.
     Encrypting on the Trezor takes time: 1M roughtly 75sec. 50M about 1h.
     Without `-2` it is very fast, a 1G file taking roughly 15 seconds.
+
+    For safety the file permission of encrypted files is set to read-only.
+
+    Examples:
+    # specify everything in the GUI
+    TrezorSymmetricFileEncryption.py
+
+    # specify everything in the GUI, set logging to verbose Debug level
+    TrezorSymmetricFileEncryption.py -l 1
+
+    # encrypt contract producing contract.doc.tsfe
+    TrezorSymmetricFileEncryption.py contract.doc
+
+    # encrypt contract and obfuscate output producing e.g. TQFYqK1nha1IfLy_qBxdGwlGRytelGRJ
+    TrezorSymmetricFileEncryption.py -o contract.doc
+
+    # decrypt contract producing contract.doc
+    TrezorSymmetricFileEncryption.py contract.doc.tsfe
+
+    # decrypt obfuscated contract producing contract.doc
+    TrezorSymmetricFileEncryption.py TQFYqK1nha1IfLy_qBxdGwlGRytelGRJ
+
+    # shows plaintext name of encrypted file, e.g. contract.doc
+    TrezorSymmetricFileEncryption.py -n TQFYqK1nha1IfLy_qBxdGwlGRytelGRJ
 ```
 
 # Testing

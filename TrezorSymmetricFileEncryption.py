@@ -147,7 +147,7 @@ class TrezorChooser(object):
 		deviceStr = dialog.chosenDeviceStr()
 		return HidTransport([deviceStr, None])
 
-def showGui(trezor, settings, fileMap, logger):
+def showGui(trezor, settings, fileMap, logger, feedback):
 	"""
 	Initialize, ask for encrypt/decrypt options,
 	ask for files to be decrypted/encrypted,
@@ -165,8 +165,14 @@ def showGui(trezor, settings, fileMap, logger):
 	settings.settings2Gui(dialog, trezor)
 	if settings.logger.getEffectiveLevel() <= logging.INFO:
 		dialog.appendDescription("<br>Trezor label: " + trezor.features.label)
+	if settings.WArg and settings.logger.getEffectiveLevel() <= logging.WARN:
+		dialog.appendDescription("<br>Warning: The option `--wipe` is set. Plaintext files will "
+			"be shredded after encryption. Abort if you are uncertain or don't understand.")
 	if not dialog.exec_():
-		logger.debug("Shutting down due to user request (Done/Quit was called).")
+		settings.guiExists = False
+		processing.reportLogging("Shutting down due to user request "
+			"(Done/Quit was called).", logging.DEBUG,
+			"GUI IO", settings, logger)
 		sys.exit(4) # Esc or exception
 	settings.guiExists = False
 	settings.gui2Settings(dialog,trezor)
@@ -174,7 +180,8 @@ def showGui(trezor, settings, fileMap, logger):
 # root
 
 logging.basicConfig(stream=sys.stderr, level=basics.LOGGINGLEVEL)
-logger = logging.getLogger('')
+logger = logging.getLogger('tsfe')
+feedback = processing.Feedback()
 
 app = QtGui.QApplication(sys.argv)
 
@@ -186,21 +193,13 @@ try:
 	trezorChooser = TrezorChooser()
 	trezor = trezorChooser.getDevice()
 except (ConnectionError, RuntimeError), e:
-	if settings.TArg:
-		logger.critical("Connection to Trezor failed: %s", e.message)
-	else:
-		msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Critical,
-			"Trezor error", "Error: Connection to Trezor failed: " + e.message)
-		msgBox.exec_()
+	processing.reportLogging("Connection to Trezor failed: %s" % e.message,
+		logging.CRITICAL, "Trezor Error", settings, logger)
 	sys.exit(1)
 
 if trezor is None:
-	if settings.TArg:
-		logger.critical("No available Trezor found, quitting.")
-	else:
-		msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Critical,
-			"Trezor error", "No available Trezor found, quitting.")
-		msgBox.exec_()
+	processing.reportLogging("No available Trezor found, quitting.",
+		logging.CRITICAL, "Trezor Error", settings, logger)
 	sys.exit(1)
 
 trezor.clear_session()
@@ -213,13 +212,12 @@ fileMap = file_map.FileMap(trezor,logger)
 # if everything is specified in the command line then do not call the GUI
 if ((settings.PArg is None) or (len(settings.inputFiles) <= 0)) and (not settings.TArg):
 	# something was not specified, so we call the GUI
-	showGui(trezor, settings, fileMap, logger)
+	showGui(trezor, settings, fileMap, logger, feedback)
 else:
 	logger.info("Everything was specified or --terminal was set, "
 		"hence the GUI will not be called.")
-	if settings.PArg is None:
-		settings.PArg = ""
+	if settings.PArg is not None:
+		trezor.prefillPassphrase(settings.PArg)
 
-	feedback = processing.Feedback()
 	processing.processAll(trezor, settings, fileMap, logger, feedback)
 	sys.exit(0)
