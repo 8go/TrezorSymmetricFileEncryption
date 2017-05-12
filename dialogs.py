@@ -5,6 +5,7 @@ import hashlib
 import logging
 
 from PyQt4 import QtGui, QtCore
+from PyQt4.QtGui import QPixmap
 
 from ui_trezor_passphrase_dialog import Ui_TrezorPassphraseDialog
 from ui_dialog import Ui_Dialog
@@ -13,6 +14,8 @@ from ui_trezor_chooser_dialog import Ui_TrezorChooserDialog
 
 from encoding import q2s, s2q
 from processing import processAllFromApply, reportLogging
+
+import basics
 
 class TrezorPassphraseDialog(QtGui.QDialog, Ui_TrezorPassphraseDialog):
 
@@ -34,12 +37,22 @@ class Dialog(QtGui.QDialog, Ui_Dialog):
 		self.fileMap = fileMap
 		self.logger = logger
 
-		self.radioButton1.toggled.connect(self.validate)
-		self.radioButton2.toggled.connect(self.validate)
-		self.radioButton3.toggled.connect(self.validate)
-		self.radioButton4.toggled.connect(self.validate)
-		self.radioButton5.toggled.connect(self.validate)
-		self.radioButton6.toggled.connect(self.validate)
+		self.radioButtonEncFile.toggled.connect(self.validateEncFile)
+		self.radioButtonEncFilename.toggled.connect(self.validateEncFilename)
+		self.radioButtonDecFile.toggled.connect(self.validateDecFile)
+		self.radioButtonDecFilename.toggled.connect(self.validateDecFilename)
+		self.checkBoxEncO.toggled.connect(self.validateEncO)
+		self.checkBoxEnc2.toggled.connect(self.validateEnc2)
+		self.checkBoxEncS.toggled.connect(self.validateEncS)
+		self.checkBoxEncW.toggled.connect(self.validateEncW)
+		self.checkBoxDecW.toggled.connect(self.validateDecW)
+
+		self.checkBoxEncO.setEnabled(False)
+		self.checkBoxEnc2.setEnabled(False)
+		self.checkBoxEncS.setEnabled(False)
+		self.checkBoxEncW.setEnabled(False)
+		self.checkBoxDecW.setEnabled(False)
+
 		self.masterEdit1.textChanged.connect(self.validate)
 		self.masterEdit2.textChanged.connect(self.validate)
 		self.selectedFileEdit.textChanged.connect(self.validate)
@@ -71,9 +84,136 @@ class Dialog(QtGui.QDialog, Ui_Dialog):
 		QtGui.QShortcut(QtGui.QKeySequence("Ctrl+S"), self, self.accept) # Save
 		QtGui.QShortcut(QtGui.QKeySequence("Ctrl+A"), self, self.accept) # Apply
 		QtGui.QShortcut(QtGui.QKeySequence("Ctrl+C"), self, self.copy2Clipboard)
+		QtGui.QShortcut(QtGui.QKeySequence("Ctrl+V"), self, self.printAbout) # Version/About
+		QtGui.QShortcut(QtGui.QKeySequence("Ctrl+E"), self, self.setEnc) # Enc
+		QtGui.QShortcut(QtGui.QKeySequence("Ctrl+D"), self, self.setDec) #
+		QtGui.QShortcut(QtGui.QKeySequence("Ctrl+O"), self, self.setEncObf) #
+		QtGui.QShortcut(QtGui.QKeySequence("Ctrl+2"), self, self.setEncTwice) #
+		QtGui.QShortcut(QtGui.QKeySequence("Ctrl+T"), self, self.setEncSafe) #
+		QtGui.QShortcut(QtGui.QKeySequence("Ctrl+W"), self, self.setEncDecWipe) #
+		QtGui.QShortcut(QtGui.QKeySequence("Ctrl+M"), self, self.setEncFn) #
+		QtGui.QShortcut(QtGui.QKeySequence("Ctrl+N"), self, self.setDecFn) #
 
 		self.clipboard = QtGui.QApplication.clipboard()
 		self.textBrowser.selectionChanged.connect(self.selectionChanged)
+
+
+	def printAbout(self):
+		"""
+		Show window with about and version information.
+		"""
+		msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Information, "About",
+			"About <b>TrezorSymmetricFileEncryption</b>: <br><br>TrezorSymmetricFileEncryption " +
+			"is a file encryption and decryption tool using a Trezor hardware "
+			"device for safety and security. Symmetric AES cryptography is used "
+			"at its core. <br><br>" +
+			"<b>Version: </b>" + basics.TSFEVERSION +
+			" from " + basics.TSFEVERSIONTEXT)
+		msgBox.setIconPixmap(QPixmap("icons/TrezorSymmetricFileEncryption.216x100.svg"))
+		msgBox.exec_()
+
+	def validateDecFile(self):
+		if self.checkBoxEncO.isChecked():
+			self.checkBoxEncO.setChecked(False)
+		if self.checkBoxEnc2.isChecked():
+			self.checkBoxEnc2.setChecked(False)
+		if self.checkBoxEncS.isChecked():
+			self.checkBoxEncS.setChecked(False)
+		if self.checkBoxEncW.isChecked():
+			self.checkBoxEncW.setChecked(False)
+		self.checkBoxEncO.setEnabled(False)
+		self.checkBoxEnc2.setEnabled(False)
+		self.checkBoxEncS.setEnabled(False)
+		self.checkBoxEncW.setEnabled(False)
+		self.checkBoxDecW.setEnabled(True)
+		self.validate()
+
+	def validateDecFilename(self):
+		if self.checkBoxEncO.isChecked():
+			self.checkBoxEncO.setChecked(False)
+		if self.checkBoxEnc2.isChecked():
+			self.checkBoxEnc2.setChecked(False)
+		if self.checkBoxEncS.isChecked():
+			self.checkBoxEncS.setChecked(False)
+		if self.checkBoxEncW.isChecked():
+			self.checkBoxEncW.setChecked(False)
+		if self.checkBoxDecW.isChecked():
+			self.checkBoxDecW.setChecked(False)
+		self.checkBoxEncO.setEnabled(False)
+		self.checkBoxEnc2.setEnabled(False)
+		self.checkBoxEncS.setEnabled(False)
+		self.checkBoxEncW.setEnabled(False)
+		self.checkBoxDecW.setEnabled(False)
+		self.validate()
+
+	def validateEncFile(self):
+		if self.checkBoxDecW.isChecked():
+			self.checkBoxDecW.setChecked(False)
+		self.checkBoxEncO.setEnabled(True)
+		self.checkBoxEnc2.setEnabled(True)
+		self.checkBoxEncS.setEnabled(True)
+		self.checkBoxEncW.setEnabled(True)
+		self.checkBoxDecW.setEnabled(False)
+		self.validate()
+
+	def validateEncFilename(self):
+		if self.checkBoxEncO.isChecked():
+			self.checkBoxEncO.setChecked(False)
+		if self.checkBoxEnc2.isChecked():
+			self.checkBoxEnc2.setChecked(False)
+		if self.checkBoxEncS.isChecked():
+			self.checkBoxEncS.setChecked(False)
+		if self.checkBoxEncW.isChecked():
+			self.checkBoxEncW.setChecked(False)
+		if self.checkBoxDecW.isChecked():
+			self.checkBoxDecW.setChecked(False)
+		self.checkBoxEncO.setEnabled(False)
+		self.checkBoxEnc2.setEnabled(False)
+		self.checkBoxEncS.setEnabled(False)
+		self.checkBoxEncW.setEnabled(False)
+		self.checkBoxDecW.setEnabled(False)
+		self.validate()
+
+	def validateEncO(self):
+		if self.checkBoxEncO.isChecked():
+			reportLogging("You have selected the option `--obfuscate`. "
+				"After encrypting the file(s) the encrypted file(s) will be "
+				"renamed to encrypted, strange looking names. This hides the meta-data,"
+				"i.e. the filename.", logging.INFO,
+				"Arguments", self.settings, self.logger, self)
+
+	def validateEnc2(self):
+		if self.checkBoxEnc2.isChecked():
+				reportLogging("You have selected the option `--twice`. "
+				"Files will be encrypted not on your computer but on the Trezor "
+				"device itself. This is slow. It takes 75 seconds for 1M. "
+				"In other words, 0.8M/min. "
+				"Remove this option if the file is too big or "
+				"you do not want to wait.", logging.INFO,
+				"Dangerous arguments", self.settings, self.logger, self)
+
+	def validateEncS(self):
+		if self.checkBoxEncS.isChecked():
+				reportLogging("You have selected the option `--safety`. "
+				"After encrypting the file(s) the file(s) will immediately "
+				"be decrypted and the output compared to the original file(s). "
+				"This safety check definitely guarantees that all is well.", logging.INFO,
+				"Arguments", self.settings, self.logger, self)
+
+	def validateEncW(self):
+		if self.checkBoxEncW.isChecked():
+				reportLogging("You have selected the option `--wipe`. "
+				"The original plaintext files will "
+				"be shredded and permanently deleted after encryption. "
+				"Remove this option if you are uncertain or don't understand.", logging.WARN,
+				"Dangerous arguments", self.settings, self.logger, self)
+
+	def validateDecW(self):
+		if self.checkBoxDecW.isChecked():
+				reportLogging("You have selected the option `--wipe`. "
+				"The encrypted files will be shredded and permanently deleted after decryption. "
+				"Remove this option if you are uncertain or don't understand.", logging.WARN,
+				"Dangerous arguments", self.settings, self.logger, self)
 
 	def selectionChanged(self):
 		"""
@@ -81,14 +221,14 @@ class Dialog(QtGui.QDialog, Ui_Dialog):
 		"""
 		# self.textBrowser.copy() # copy selected to clipboard
 		# reportLogging("Copied text to clipboard: %s" % self.clipboard.text(),
-		#	logging.DEBUG, "Clipboard", self.settings, self.logger)
+		#	logging.DEBUG, "Clipboard", self.settings, self.logger, self)
 		""" empty """
 
 	def copy2Clipboard(self):
 		self.textBrowser.copy() # copy selected to clipboard
 		# This is content from the Status textarea, so no secrets here, we can log it
 		reportLogging("Copied text to clipboard: %s" % self.clipboard.text(), logging.DEBUG,
-			"Clipboard", self.settings, self.logger)
+			"Clipboard", self.settings, self.logger, self)
 
 	def setVersion(self, version):
 		self.version = version
@@ -111,56 +251,84 @@ class Dialog(QtGui.QDialog, Ui_Dialog):
 		self.description2 += extradescription
 		self.textBrowser.setHtml(s2q(self.description1 + self.description2 + self.description3))
 
-	def enc(self):
-		"""
-		Returns True if radio button for option "encrypt with plaintext filename"
-		is selected
-		"""
-		return self.radioButton1.isChecked()
-
-	def setEnc(self, arg):
-		self.radioButton1.setChecked(arg)
-
 	def encObf(self):
 		"""
 		Returns True if radio button for option "encrypt and obfuscate filename"
 		is selected
 		"""
-		return self.radioButton2.isChecked()
+		return self.checkBoxEncO.isChecked()
 
-	def setEncObf(self, arg):
-		self.radioButton2.setChecked(arg)
-
-	def setEncTwice(self, arg):
-		self.radioButton5.setChecked(arg)
-
-	def setEncTwiceObf(self, arg):
-		self.radioButton6.setChecked(arg)
+	def setEncObf(self, arg=True):
+		self.checkBoxEncO.setChecked(arg)
 
 	def encTwice(self):
-		return self.radioButton5.isChecked()
+		return self.checkBoxEnc2.isChecked()
 
-	def encTwiceObf(self):
-		return self.radioButton6.isChecked()
+	def setEncTwice(self, arg=True):
+		self.checkBoxEnc2.setChecked(arg)
+
+	def encSafe(self):
+		return self.checkBoxEncS.isChecked()
+
+	def setEncSafe(self, arg=True):
+		self.checkBoxEncS.setChecked(arg)
+
+	def encWipe(self):
+		return self.checkBoxEncW.isChecked()
+
+	def setEncWipe(self, arg=True):
+		self.checkBoxEncW.setChecked(arg)
+
+	def decWipe(self):
+		return self.checkBoxDecW.isChecked()
+
+	def setDecWipe(self, arg=True):
+		self.checkBoxDecW.setChecked(arg)
+
+	def setEncDecWipe(self, arg=True):
+		if self.enc():
+			self.setEncWipe(arg)
+		if self.dec():
+			self.setDecWipe(arg)
+
+	def enc(self):
+		"""
+		Returns True if radio button for option "encrypt with plaintext filename"
+		is selected
+		"""
+		return self.radioButtonEncFile.isChecked()
+
+	def setEnc(self, arg=True):
+		self.radioButtonEncFile.setChecked(arg)
+
+	def encFn(self):
+		"""
+		Returns True if radio button for option "encrypt with plaintext filename"
+		is selected
+		"""
+		return self.radioButtonEncFilename.isChecked()
+
+	def setEncFn(self, arg=True):
+		self.radioButtonEncFilename.setChecked(arg)
 
 	def dec(self):
 		"""
 		Returns True if radio button for option "decrypt" is selected
 		"""
-		return self.radioButton3.isChecked()
+		return self.radioButtonDecFile.isChecked()
 
-	def setDec(self, arg):
-		self.radioButton3.setChecked(arg)
+	def setDec(self, arg=True):
+		self.radioButtonDecFile.setChecked(arg)
 
 	def decFn(self):
 		"""
 		Returns True if radio button for option "decrypt only filename" is
 		selected
 		"""
-		return self.radioButton4.isChecked()
+		return self.radioButtonDecFilename.isChecked()
 
-	def setDecFn(self, arg):
-		self.radioButton4.setChecked(arg)
+	def setDecFn(self, arg=True):
+		self.radioButtonDecFilename.setChecked(arg)
 
 	def pw1(self):
 		return self.masterEdit1.text()
@@ -224,19 +392,16 @@ class Dialog(QtGui.QDialog, Ui_Dialog):
 
 		# QtGui.QDialogButtonBox.Ok
 		button = self.buttonBox.button(QtGui.QDialogButtonBox.Apply)
-		# exactly one is set
-		#  and (self.enc() ^ self.encObf() ^ self.dec()) and not (self.enc() and self.encObf() and self.dec())
 		button.setEnabled(fileSelected and (same or self.dec() or self.decFn()))
 		return fileSelected and (same or self.dec() or self.decFn())
 
 #	def handleButtonClick(self, button):
 #		sb = self.buttonBox.standardButton(button)
 #		if sb == QtGui.QDialogButtonBox.Apply:
-#			feedback = processAllFromApply(self, self.trezor, self.settings, self.fileMap, self.logger) #
-#			self.appendDescription(feedback)
+#			processAllFromApply(self, self.trezor, self.settings, self.fileMap, self.logger) #
 #		# elif sb == QtGui.QDialogButtonBox.Reset:
 #		#	reportLogging("Reset Clicked, quitting now...", logging.DEBUG,
-#		#		"UI", self.settings, self.logger)
+#		#		"UI", self.settings, self.logger, self)
 
 	def accept(self):
 		"""
@@ -244,9 +409,8 @@ class Dialog(QtGui.QDialog, Ui_Dialog):
 		"""
 		if self.validate():
 			reportLogging("Apply was called by user request. Start processing now.",
-				logging.DEBUG, "GUI IO", self.settings, self.logger)
-			feedback = processAllFromApply(self, self.trezor, self.settings, self.fileMap, self.logger) #
-			self.appendDescription(feedback)
+				logging.DEBUG, "GUI IO", self.settings, self.logger, self)
+			processAllFromApply(self, self.trezor, self.settings, self.fileMap, self.logger) #
 			# move the cursor to the end of the text, scroll to the bottom
 			cursor = self.textBrowser.textCursor()
 			cursor.setPosition(len(self.textBrowser.toPlainText()))
@@ -255,7 +419,7 @@ class Dialog(QtGui.QDialog, Ui_Dialog):
 		else:
 			reportLogging("Apply was called by user request. Apply is denied. "
 				"User input is not valid for processing. Did you select a file?",
-				logging.DEBUG, "GUI IO", self.settings, self.logger)
+				logging.DEBUG, "GUI IO", self.settings, self.logger, self)
 
 	# Don't set up a reject() method, it is automatically created.
 	# If created here again it would overwrite the default one
@@ -279,7 +443,7 @@ class Dialog(QtGui.QDialog, Ui_Dialog):
 		qFnameList = dialog.selectedFiles() # QStringList
 		self.fileNames = str(qFnameList.join("<join>")).split("<join>") # convert to Py list
 		reportLogging("Selected files are: %s" % str(self.fileNames),
-			logging.DEBUG, "GUI IO", self.settings, self.logger)
+			logging.DEBUG, "GUI IO", self.settings, self.logger, self)
 		self.setSelectedFile(self.fileNames)
 
 class EnterPinDialog(QtGui.QDialog, Ui_EnterPinDialog):

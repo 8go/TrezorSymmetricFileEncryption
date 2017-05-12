@@ -147,7 +147,7 @@ class TrezorChooser(object):
 		deviceStr = dialog.chosenDeviceStr()
 		return HidTransport([deviceStr, None])
 
-def showGui(trezor, settings, fileMap, logger, feedback):
+def showGui(trezor, settings, fileMap, logger):
 	"""
 	Initialize, ask for encrypt/decrypt options,
 	ask for files to be decrypted/encrypted,
@@ -161,27 +161,20 @@ def showGui(trezor, settings, fileMap, logger, feedback):
 		items selected in GUI
 	"""
 	dialog = Dialog(trezor, settings, fileMap, logger)
-	settings.guiExists = True
 	settings.settings2Gui(dialog, trezor)
-	if settings.logger.getEffectiveLevel() <= logging.INFO:
-		dialog.appendDescription("<br>Trezor label: " + trezor.features.label)
-	if settings.WArg and settings.logger.getEffectiveLevel() <= logging.WARN:
-		dialog.appendDescription("<br>Warning: The option `--wipe` is set. Plaintext files will "
-			"be shredded after encryption. Abort if you are uncertain or don't understand.")
+	processing.reportLogging("Trezor label: %s" % trezor.features.label, logging.INFO,
+		"Trezor IO", settings, logger, dialog)
 	if not dialog.exec_():
-		settings.guiExists = False
 		processing.reportLogging("Shutting down due to user request "
 			"(Done/Quit was called).", logging.DEBUG,
-			"GUI IO", settings, logger)
+			"GUI IO", settings, logger, None)
 		sys.exit(4) # Esc or exception
-	settings.guiExists = False
 	settings.gui2Settings(dialog,trezor)
 
 # root
 
 logging.basicConfig(stream=sys.stderr, level=basics.LOGGINGLEVEL)
 logger = logging.getLogger('tsfe')
-feedback = processing.Feedback()
 
 app = QtGui.QApplication(sys.argv)
 
@@ -204,20 +197,27 @@ if trezor is None:
 
 trezor.clear_session()
 
-if settings.TArg:
-	logger.info("Trezor label: %s", trezor.features.label)
-
 fileMap = file_map.FileMap(trezor,logger)
 
 # if everything is specified in the command line then do not call the GUI
 if ((settings.PArg is None) or (len(settings.inputFiles) <= 0)) and (not settings.TArg):
 	# something was not specified, so we call the GUI
-	showGui(trezor, settings, fileMap, logger, feedback)
+	showGui(trezor, settings, fileMap, logger)
 else:
-	logger.info("Everything was specified or --terminal was set, "
-		"hence the GUI will not be called.")
+	processing.reportLogging("Trezor label: %s" % trezor.features.label, logging.INFO,
+		"Trezor IO", settings, logger, None)
+	processing.reportLogging("Everything was specified or --terminal was set, "
+		"hence the GUI will not be called.", logging.INFO,
+		"Trezor IO", settings, logger, None)
+	if settings.WArg:
+		processing.reportLogging("The option `--wipe` is set. In case of "
+			"encryption, the original plaintext files will "
+			"be shredded after encryption. In case of decryption, "
+			"the encrypted files will be shredded after decryption. "
+			"Abort if you are uncertain or don't understand.", logging.WARNING,
+			"Dangerous arguments", settings, logger, None)
 	if settings.PArg is not None:
 		trezor.prefillPassphrase(settings.PArg)
 
-	processing.processAll(trezor, settings, fileMap, logger, feedback)
+	processing.processAll(trezor, settings, fileMap, logger, dialog=None)
 	sys.exit(0)
