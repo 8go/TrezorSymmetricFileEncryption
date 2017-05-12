@@ -41,9 +41,9 @@ Note that it is software, currently in alpha stage.
 
 # Screenshot
 
-Below a sample screenshot. More screenshots [here](https://github.com/8go/TrezorSymmetricFileEncryption/tree/master/screenshots).
+Below a sample screenshot. More screenshots [here](screenshots).
 
-![screenshot](https://github.com/8go/TrezorSymmetricFileEncryption/blob/master/screenshots/screenshot_TrezorSymmetricFileEncryption_mainWindow2.version03b.png)
+![screenshot](screenshots/screenshot_TrezorSymmetricFileEncryption_mainWindow6.version04b.png)
 
 # Build and runtime requirements
 
@@ -74,7 +74,7 @@ Run:
 Run-time command line options are
 
 ```
-TrezorSymmetricFileEncryption.py [-v] [-h] [-l <level>] [-t] [-2] [-s] [-w] [-o | -e | -d | -n] [-p <passphrase>] <files>
+TrezorSymmetricFileEncryption.py [-v] [-h] [-l <level>] [-t] [-2] [-s] [-w] [-o | -e | -d | -m | -n] [-p <passphrase>] <files>
     -v, --verion
             print the version number
     -h, --help
@@ -113,9 +113,11 @@ TrezorSymmetricFileEncryption.py [-v] [-h] [-l <level>] [-t] [-2] [-s] [-w] [-o 
             only relevant for `-e` and `-o`; ignored in all other cases.
             Primarily useful for testing.
     -w, --wipe
-            shred the plaintext file after encryption;
-            only relevant for `-e` and `-o`; ignored in all other cases.
-            Use with caution. May be used together with `-s`.
+            shred the inputfile after creating the output file
+            i.e. shred the plaintext file after encryption or
+            shred the encrypted file after decryption;
+            only relevant for `-d`, `-e` and `-o`; ignored in all other cases.
+            Use with extreme caution. May be used together with `-s`.
     <files>
             one or multiple files to be encrypted or decrypted
 
@@ -164,6 +166,10 @@ TrezorSymmetricFileEncryption.py [-v] [-h] [-l <level>] [-t] [-2] [-s] [-w] [-o 
     # encrypt contract and obfuscate output producing e.g. TQFYqK1nha1IfLy_qBxdGwlGRytelGRJ
     TrezorSymmetricFileEncryption.py -o contract.doc
 
+    # encrypt contract and obfuscate output producing e.g. TQFYqK1nha1IfLy_qBxdGwlGRytelGRJ
+    # performs safety check and then shreds contract.doc
+    TrezorSymmetricFileEncryption.py -e -o -s -w contract.doc
+
     # decrypt contract producing contract.doc
     TrezorSymmetricFileEncryption.py contract.doc.tsfe
 
@@ -172,6 +178,18 @@ TrezorSymmetricFileEncryption.py [-v] [-h] [-l <level>] [-t] [-2] [-s] [-w] [-o 
 
     # shows plaintext name of encrypted file, e.g. contract.doc
     TrezorSymmetricFileEncryption.py -n TQFYqK1nha1IfLy_qBxdGwlGRytelGRJ
+
+    Keyboard shortcuts of GUI:
+    Apply, Save: Control-A, Control-S
+    Cancel, Quit: Esc, Control-Q
+    Copy to clipboard: Control-C
+    Version, About: Control-V
+    Set encrypt operation: Control-E
+    Set decrypt operation: Control-D
+    Set obfuscate option: Control-O
+    Set twice option: Control-2
+    Set safety option: Control-T
+    Set wipe option: Control-W
 ```
 
 # Testing

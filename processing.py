@@ -20,25 +20,6 @@ from trezorlib.client import CallException, PinException
 from encoding import q2s, s2q
 import basics
 
-class Feedback(object):
-	"""
-	string reported back to the GUI and displayed in the Status textarea of the GUI
-	"""
-	def __init__(self):
-		self.feedback = "" # html formatted string with <br> as linebreaks
-
-	def addFeedback(self,fb):
-		self.feedback += fb
-
-	def setFeedback(self,fb):
-		self.feedback = fb
-
-	def getFeedback(self):
-		return self.feedback
-
-	def clearFeedback(self):
-		self.feedback = ""
-
 class Settings(object):
 	"""
 	Settings, command line options, GUI selected values
@@ -46,7 +27,6 @@ class Settings(object):
 
 	def __init__(self, logger):
 		self.logger = logger
-		self.guiExists = False
 		self.VArg = False
 		self.HArg = False
 		self.TArg = False
@@ -62,7 +42,6 @@ class Settings(object):
 		self.inputFiles = [] # list of input filenames
 
 	def printSettings(self):
-		self.logger.debug("self.guiExists = %s", self.guiExists)
 		self.logger.debug("self.VArg = %s", self.VArg)
 		self.logger.debug("self.HArg = %s", self.HArg)
 		self.logger.debug("self.TArg = %s", self.TArg)
@@ -81,9 +60,12 @@ class Settings(object):
 		trezor.prefillPassphrase(q2s(dialog.pw1()))
 		self.DArg = dialog.dec()
 		self.NArg = dialog.decFn()
-		self.EArg = dialog.enc() and not dialog.encTwice() and not dialog.encObf()
-		self.OArg = dialog.encObf() or dialog.encTwiceObf()
-		self.XArg = dialog.encTwice() or dialog.encTwiceObf()
+		self.EArg = dialog.enc()
+		self.MArg = dialog.encFn()
+		self.OArg = dialog.encObf()
+		self.XArg = dialog.encTwice()
+		self.SArg = dialog.encSafe()
+		self.WArg = dialog.encWipe() or dialog.decWipe()
 		self.PArg = q2s(dialog.pw1())
 		if self.PArg is None:
 			self.PArg = ""
@@ -97,50 +79,70 @@ class Settings(object):
 		dialog.setSelectedFiles(self.inputFiles)
 		dialog.setDec(self.DArg)
 		dialog.setDecFn(self.NArg)
-		dialog.setEnc(self.EArg and not self.OArg and not self.XArg)
-		dialog.setEncObf(self.OArg and not self.XArg)
-		dialog.setEncTwice(self.XArg and self.EArg and not self.OArg)
-		dialog.setEncTwiceObf(self.XArg and self.EArg and self.OArg)
+		dialog.setDecWipe(self.WArg and self.DArg)
+		dialog.setEnc(self.EArg)
+		dialog.setEncFn(self.MArg)
+		dialog.setEncObf(self.OArg and self.EArg)
+		dialog.setEncTwice(self.XArg and self.EArg)
+		dialog.setEncSafe(self.SArg and self.EArg)
+		dialog.setEncWipe(self.WArg and self.EArg)
 		dialog.setPw1(self.PArg)
 		dialog.setPw2(self.PArg)
 		self.printSettings()
 
 
-def shred(filename, passes, settings = None, logger = None, feedback = None):
+def shred(filename, passes, settings = None, logger = None, dialog = None):
 	"""
 	There is no guarantee that the file will actually be shredded.
 	The OS or the smart disk might buffer it in a cache and
 	data might remain on the physical disk.
 	This is a best effort.
 	"""
-	if not os.path.isfile(filename):
-		raise IOError("Cannot shred, \"%s\" is not a file." % filename)
+	try:
+		if not os.path.isfile(filename):
+			raise IOError("Cannot shred, \"%s\" is not a file." % filename)
 
-	ld = os.path.getsize(filename)
-	fh = open(filename,  "w")
-	for _ in range(int(passes)):
-		data = "0" * ld
-		fh.write(data)
-		fh.seek(0,  0)
-	fh.close()
-	fh = open(filename,  "w")
-	fh.truncate(0)
-	fh.close()
-	urandom_entropy = os.urandom(64)
-	randomBin = hashlib.sha256(urandom_entropy).digest()
-	randomB64 = base64.urlsafe_b64encode(randomBin).replace("=", "-")
-	urandom_entropy = os.urandom(64)
-	randomBin = hashlib.sha256(urandom_entropy).digest()
-	randomB64 = randomB64 + base64.urlsafe_b64encode(randomBin).replace("=", "-")
-	os.rename(filename, randomB64)
-	os.remove(randomB64)
-	if settings is not None and logger is not None and feedback is not None:
+		ld = os.path.getsize(filename)
+		fh = open(filename,  "w")
+		for _ in range(int(passes)):
+			data = "0" * ld
+			fh.write(data)
+			fh.seek(0,  0)
+		fh.close()
+		fh = open(filename,  "w")
+		fh.truncate(0)
+		fh.close()
+		urandom_entropy = os.urandom(64)
+		randomBin = hashlib.sha256(urandom_entropy).digest()
+		randomB64 = base64.urlsafe_b64encode(randomBin).replace("=", "-")
+		urandom_entropy = os.urandom(64)
+		randomBin = hashlib.sha256(urandom_entropy).digest()
+		randomB64 = randomB64 + base64.urlsafe_b64encode(randomBin).replace("=", "-")
+		os.rename(filename, randomB64)
+		os.remove(randomB64)
+	except IOError, e:
+		if settings is not None and logger is not None and dialog is not None:
+			reportLogging("Skipping shredding of file \"%s\" (IO error: %s)" %
+				(filename, e), logging.WARN,
+				"IO Error", settings, logger, dialog)
+		elif logger is not None:
+			logger.warning("Skipping shredding of file \"%s\" (IO error: %s)" %
+				(filename, e))
+		else:
+			print("Skipping shredding of file \"%s\" (IO error: %s)" %
+				(filename, e))
+		return False
+	if settings is not None and logger is not None and dialog is not None:
 		reportLogging("File \"%s\" has been shredded and deleted." % filename,
-			logging.INFO, "File IO", settings, logger, feedback)
-
+			logging.INFO, "File IO", settings, logger, dialog)
+	elif logger is not None:
+		logger.info("Info: File \"%s\" has been shredded and deleted." % filename)
+	else:
+		print("Info: File \"%s\" has been shredded and deleted." % filename)
+	return True
 
 def usage():
-	print """TrezorSymmetricFileEncryption.py [-v] [-h] [-l <level>] [-t] [-2] [-s] [-w] [-o | -e | -d | -n] [-p <passphrase>] <files>
+	print """TrezorSymmetricFileEncryption.py [-v] [-h] [-l <level>] [-t] [-2] [-s] [-w] [-o | -e | -d | -m | -n] [-p <passphrase>] <files>
 		-v, --verion
 				print the version number
 		-h, --help
@@ -179,9 +181,11 @@ def usage():
 				only relevant for `-e` and `-o`; ignored in all other cases.
 				Primarily useful for testing.
 		-w, --wipe
-				shred the plaintext file after encryption;
-				only relevant for `-e` and `-o`; ignored in all other cases.
-				Use with caution. May be used together with `-s`.
+				shred the inputfile after creating the output file
+				i.e. shred the plaintext file after encryption or
+				shred the encrypted file after decryption;
+				only relevant for `-d`, `-e` and `-o`; ignored in all other cases.
+				Use with extreme caution. May be used together with `-s`.
 		<files>
 				one or multiple files to be encrypted or decrypted
 
@@ -230,6 +234,10 @@ def usage():
 		# encrypt contract and obfuscate output producing e.g. TQFYqK1nha1IfLy_qBxdGwlGRytelGRJ
 		TrezorSymmetricFileEncryption.py -o contract.doc
 
+    	# encrypt contract and obfuscate output producing e.g. TQFYqK1nha1IfLy_qBxdGwlGRytelGRJ
+    	# performs safety check and then shreds contract.doc
+    	TrezorSymmetricFileEncryption.py -e -o -s -w contract.doc
+
 		# decrypt contract producing contract.doc
 		TrezorSymmetricFileEncryption.py contract.doc.tsfe
 
@@ -238,6 +246,18 @@ def usage():
 
 		# shows plaintext name of encrypted file, e.g. contract.doc
 		TrezorSymmetricFileEncryption.py -n TQFYqK1nha1IfLy_qBxdGwlGRytelGRJ
+
+		Keyboard shortcuts of GUI:
+		Apply, Save: Control-A, Control-S
+		Cancel, Quit: Esc, Control-Q
+		Copy to clipboard: Control-C
+		Version, About: Control-V
+		Set encrypt operation: Control-E
+		Set decrypt operation: Control-D
+		Set obfuscate option: Control-O
+		Set twice option: Control-2
+		Set safety option: Control-T
+		Set wipe option: Control-W
 		"""
 
 def printVersion():
@@ -322,8 +342,8 @@ def parseArgs(argv, settings, logger):
 		sys.exit(2)
 	if settings.DArg or settings.NArg or settings.MArg:
 		settings.XArg = False # X is relevant only when -e or -o is set
-	if settings.EArg and settings.OArg:
-		settings.EArg = False # if both E and O are set we default to O
+	if settings.OArg:
+		settings.EArg = True # treat O like an extra flag, used in addition
 	if settings.MArg:
 		settings.EArg = False
 		settings.OArg = False
@@ -331,32 +351,28 @@ def parseArgs(argv, settings, logger):
 		settings.DArg = False
 	settings.inputFiles = args
 	settings.printSettings()
-	if settings.WArg:
-		reportLogging("Warning: The option `--wipe` is set. Plaintext files will "
-			"be shredded after encryption. Abort if you are uncertain or don't understand.", logging.WARNING,
-			"Dangerous arguments", settings, logger)
 
-def reportLogging(str, level, title, settings, logger, feedback=None):
+def reportLogging(str, level, title, settings, logger, dialog=None):
 	"""
 	Displays string str depending on scenario:
 	a) in terminal mode: thru logger (except if loglevel == NOTSET)
-	b) in GUI mode and GUI window open: in Status textarea of GUI window
-	c) in GUI mode but window already closed: thru QMessageBox()
+	b) in GUI mode and GUI window open: (dialog!=None) in Status textarea of GUI window
+	c) in GUI mode but window still/already closed: (dialog=None) thru QMessageBox()
 
 	@param str: string to report/log
 	@param level: log level from DEBUG to CRITICAL
 	@param title: window title text
 	"""
-	if feedback == None:
+	if dialog is None:
 		guiExists = False
 	else:
-		guiExists = settings.guiExists
+		guiExists = True
 	if level == logging.NOTSET:
 		if settings.TArg:
 			print str # stdout
 		elif guiExists:
 			print str # stdout
-			feedback.addFeedback("<br>%s" %	(str))
+			dialog.appendDescription("<br>%s" %	(str))
 		else:
 			print str # stdout
 			msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Information,
@@ -368,7 +384,7 @@ def reportLogging(str, level, title, settings, logger, feedback=None):
 		elif guiExists:
 			logger.debug(str)
 			if logger.getEffectiveLevel() <= level:
-				feedback.addFeedback("<br>Debug: %s" %	(str))
+				dialog.appendDescription("<br>Debug: %s" %	(str))
 		else:
 			# don't spam the user with too many pop-ups
 			# For debug, instead of a pop-up we write to stdout
@@ -379,7 +395,7 @@ def reportLogging(str, level, title, settings, logger, feedback=None):
 		elif guiExists:
 			logger.info(str)
 			if logger.getEffectiveLevel() <= level:
-				feedback.addFeedback("<br>Info: %s" %	(str))
+				dialog.appendDescription("<br>Info: %s" %	(str))
 		else:
 			logger.info(str)
 			if logger.getEffectiveLevel() <= level:
@@ -392,7 +408,7 @@ def reportLogging(str, level, title, settings, logger, feedback=None):
 		elif guiExists:
 			logger.warning(str)
 			if logger.getEffectiveLevel() <= level:
-				feedback.addFeedback("<br>Warning: %s" %	(str))
+				dialog.appendDescription("<br>Warning: %s" %	(str))
 		else:
 			logger.warning(str)
 			if logger.getEffectiveLevel() <= level:
@@ -405,7 +421,7 @@ def reportLogging(str, level, title, settings, logger, feedback=None):
 		elif guiExists:
 			logger.error(str)
 			if logger.getEffectiveLevel() <= level:
-				feedback.addFeedback("<br>Error: %s" %	(str))
+				dialog.appendDescription("<br>Error: %s" %	(str))
 		else:
 			logger.error(str)
 			if logger.getEffectiveLevel() <= level:
@@ -418,15 +434,21 @@ def reportLogging(str, level, title, settings, logger, feedback=None):
 		elif guiExists:
 			logger.critical(str)
 			if logger.getEffectiveLevel() <= level:
-				feedback.addFeedback("<br>Critical: %s" %	(str))
+				dialog.appendDescription("<br>Critical: %s" %	(str))
 		else:
 			logger.critical(str)
 			if logger.getEffectiveLevel() <= level:
 				msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Critical,
 					title, "Critical: %s" % (str))
 				msgBox.exec_()
+	if dialog is not None:
+		# move the cursor to the end of the text, scroll to the bottom
+		cursor = dialog.textBrowser.textCursor()
+		cursor.setPosition(len(dialog.textBrowser.toPlainText()))
+		dialog.textBrowser.ensureCursorVisible()
+		dialog.textBrowser.setTextCursor(cursor)
 
-def analyzeFilename(inputFile, settings, logger, feedback):
+def analyzeFilename(inputFile, settings, logger, dialog):
 	"""
 	Determine from the input filename if we have to Encrypt or decrypt the file.
 
@@ -448,7 +470,7 @@ def analyzeFilename(inputFile, settings, logger, feedback):
 	@param inputFile: filename
 	"""
 	reportLogging("Analyzing filename %s" % inputFile, logging.DEBUG,
-		"Debug", settings, logger, feedback)
+		"Debug", settings, logger, dialog)
 	head, tail = os.path.split(inputFile)
 
 	if '.' in tail:
@@ -462,7 +484,7 @@ def analyzeFilename(inputFile, settings, logger, feedback):
 		else:
 			return("e")
 
-def decryptFileNameOnly(inputFile, settings, fileMap, logger, feedback):
+def decryptFileNameOnly(inputFile, settings, fileMap, logger, dialog):
 	"""
 	Decrypt a filename.
 	If it ends with .tsfe then the filename is plain text
@@ -471,7 +493,7 @@ def decryptFileNameOnly(inputFile, settings, fileMap, logger, feedback):
 	@param inputFile: filename
 	"""
 	reportLogging("Decrypting filename %s" % inputFile, logging.DEBUG,
-		"Debug", settings, logger, feedback)
+		"Debug", settings, logger, dialog)
 	head, tail = os.path.split(inputFile)
 
 	if tail.endswith(basics.TSFEFILEEXT) or (not ((len(tail) % 16 == 0) and \
@@ -488,20 +510,20 @@ def decryptFileNameOnly(inputFile, settings, fileMap, logger, feedback):
 	phead, ptail = os.path.split(plaintextfname)
 	if not isObfuscated:
 		reportLogging("Plaintext filename/path: \"%s\"" % plaintextfname,
-			logging.DEBUG, "Filename deobfuscation", settings, logger, feedback)
+			logging.DEBUG, "Filename deobfuscation", settings, logger, dialog)
 		reportLogging("Filename/path \"%s\" is already in plaintext." % tail,
-			logging.INFO, "Filename deobfuscation", settings, logger, feedback)
+			logging.INFO, "Filename deobfuscation", settings, logger, dialog)
 	else:
 		reportLogging("Encrypted filename/path: \"%s\"" % inputFile,
-			logging.DEBUG, "Filename deobfuscation", settings, logger, feedback)
+			logging.DEBUG, "Filename deobfuscation", settings, logger, dialog)
 		reportLogging("Plaintext filename/path: \"%s\"" % plaintextfname,
-			logging.DEBUG, "Filename deobfuscation", settings, logger, feedback)
+			logging.DEBUG, "Filename deobfuscation", settings, logger, dialog)
 		reportLogging("Plaintext filename of \"%s\" is \"%s\"." %
 			(tail, ptail), logging.NOTSET,
-			"Filename deobfuscation", settings, logger, feedback)
+			"Filename deobfuscation", settings, logger, dialog)
 	return plaintextfname
 
-def decryptFile(inputFile, settings, fileMap, logger, feedback):
+def decryptFile(inputFile, settings, fileMap, logger, dialog):
 	"""
 	Decrypt a file.
 	If it ends with .tsfe then the filename is plain text
@@ -510,19 +532,19 @@ def decryptFile(inputFile, settings, fileMap, logger, feedback):
 	@param inputFile: filename of encrypted file
 	"""
 	reportLogging("Decrypting file %s" % inputFile, logging.DEBUG,
-		"Debug", settings, logger, feedback)
+		"Debug", settings, logger, dialog)
 	head, tail = os.path.split(inputFile)
 
 	if not os.path.isfile(inputFile):
 		reportLogging("File \"%s\" does not exist, is not a proper file, "
 			"or is a directory. Skipping it." % inputFile, logging.ERROR,
-			"File IO Error", settings, logger, feedback)
+			"File IO Error", settings, logger, dialog)
 		return
 	else:
 		if not os.access(inputFile, os.R_OK):
 			reportLogging("File \"%s\" cannot be read. No read permissions. "
 				"Skipping it." % inputFile, logging.ERROR, "File IO Error",
-				settings, logger, feedback)
+				settings, logger, dialog)
 			return
 
 	if tail.endswith(basics.TSFEFILEEXT):
@@ -535,53 +557,59 @@ def decryptFile(inputFile, settings, fileMap, logger, feedback):
 
 	if not isEncrypted:
 		reportLogging("File/path seems plaintext: \"%s\"" % inputFile,
-			logging.DEBUG, "File decryption", settings, logger, feedback)
+			logging.DEBUG, "File decryption", settings, logger, dialog)
 		reportLogging("File \"%s\" seems to be already in plaintext. "
 			"Decrypting a plaintext file will fail. Skipping file." % tail,
-			logging.WARNING, "File decryption", settings, logger, feedback)
+			logging.WARNING, "File decryption", settings, logger, dialog)
 		return None
 	else:
 		outputfname = fileMap.createDecFile(inputFile)
+		# for safety make decrypted file rw to user only
+		os.chmod(outputfname, stat.S_IRUSR | stat.S_IWUSR )
 		ohead, otail = os.path.split(outputfname)
 		reportLogging("Encrypted file/path: \"%s\"" % inputFile,
-			logging.DEBUG, "File decryption", settings, logger, feedback)
+			logging.DEBUG, "File decryption", settings, logger, dialog)
 		reportLogging("Decrypted file/path: \"%s\"" % outputfname,
-			logging.DEBUG, "File decryption", settings, logger, feedback)
+			logging.DEBUG, "File decryption", settings, logger, dialog)
 		reportLogging("File \"%s\" has been decrypted successfully. "
 			"Decrypted file \"%s\" was produced." % (tail, otail),
-			logging.NOTSET, "File decryption", settings, logger, feedback)
+			logging.NOTSET, "File decryption", settings, logger, dialog)
+		if os.path.isfile(inputFile) and settings.WArg and settings.DArg:
+			# encrypted files are usually read-only, make rw before shred
+			os.chmod(inputFile, stat.S_IRUSR | stat.S_IWUSR )
+			shred(inputFile, 3, settings, logger, dialog)
 	return outputfname
 
-def encryptFileNameOnly(inputFile, settings, fileMap, logger, feedback):
+def encryptFileNameOnly(inputFile, settings, fileMap, logger, dialog):
 	"""
 	Encrypt a filename.
 	Show only what the obfuscated filename would be, without encrypting the file
 	"""
 	reportLogging("Encrypting filename %s" % inputFile, logging.DEBUG,
-		"Debug", settings, logger, feedback)
+		"Debug", settings, logger, dialog)
 	head, tail = os.path.split(inputFile)
 
-	if analyzeFilename(inputFile, settings, logger, feedback) == "d":
+	if analyzeFilename(inputFile, settings, logger, dialog) == "d":
 		reportLogging("Filename/path seems decrypted: \"%s\"" % inputFile,
-			logging.DEBUG, "File decryption", settings, logger, feedback)
+			logging.DEBUG, "File decryption", settings, logger, dialog)
 		reportLogging("Filename/path \"%s\" looks like an encrypted file. "
 			"Why would you encrypt its filename? This looks strange." % tail,
-			logging.WARNING, "Filename obfuscation", settings, logger, feedback)
+			logging.WARNING, "Filename obfuscation", settings, logger, dialog)
 
 	obfFileName = os.path.join(head, fileMap.obfuscateFilename(tail))
 
 	ohead, otail = os.path.split(obfFileName)
 	reportLogging("Plaintext filename/path: \"%s\"" % inputFile,
-		logging.DEBUG, "Filename obfuscation", settings, logger, feedback)
+		logging.DEBUG, "Filename obfuscation", settings, logger, dialog)
 	reportLogging("Obfuscated filename/path: \"%s\"" % obfFileName,
-		logging.DEBUG, "Filename obfuscation", settings, logger, feedback)
+		logging.DEBUG, "Filename obfuscation", settings, logger, dialog)
 	# Do not modify or remove the next line.
 	# The test harness, the test shell script requires it.
 	reportLogging("Obfuscated filename/path of \"%s\" is \"%s\"." % (tail, otail),
-		logging.NOTSET, "Filename obfuscation", settings, logger, feedback)
+		logging.NOTSET, "Filename obfuscation", settings, logger, dialog)
 	return obfFileName
 
-def encryptFile(inputFile, settings, fileMap, obfuscate, twice, logger, feedback):
+def encryptFile(inputFile, settings, fileMap, obfuscate, twice, logger, dialog):
 	"""
 	Encrypt a file.
 	if obfuscate == false then keep the output filename in plain text and add .tsfe
@@ -592,20 +620,20 @@ def encryptFile(inputFile, settings, fileMap, obfuscate, twice, logger, feedback
 		desired or a plaintext filename (False)
 	"""
 	reportLogging("Encrypting file %s" % inputFile, logging.DEBUG,
-		"Debug", settings, logger, feedback)
+		"Debug", settings, logger, dialog)
 	originalFilename = inputFile
 	head, tail = os.path.split(inputFile)
 
 	if not os.path.isfile(inputFile):
 		reportLogging("File \"%s\" does not exist, is not a proper file, "
 			"or is a directory. Skipping it." % inputFile, logging.ERROR,
-			"File IO Error", settings, logger, feedback)
+			"File IO Error", settings, logger, dialog)
 		return
 	else:
 		if not os.access(inputFile, os.R_OK):
 			reportLogging("File \"%s\" cannot be read. No read permissions. "
 				"Skipping it." % inputFile, logging.ERROR, "File IO Error",
-				settings, logger, feedback)
+				settings, logger, dialog)
 			return
 
 	if (os.path.getsize(inputFile) > 8388608) and twice: # 8M+ and -2 option
@@ -616,7 +644,7 @@ def encryptFile(inputFile, settings, fileMap, obfuscate, twice, logger, feedback
 			"remove the `-2` or `--twice` option." %
 			(tail, os.path.getsize(inputFile) / 819200),
 			logging.WARNING, "Filename obfuscation",
-			settings, logger, feedback) # 800K/min
+			settings, logger, dialog) # 800K/min
 
 	if tail.endswith(basics.TSFEFILEEXT):
 		isEncrypted = True
@@ -628,34 +656,34 @@ def encryptFile(inputFile, settings, fileMap, obfuscate, twice, logger, feedback
 
 	if isEncrypted:
 		reportLogging("File/path seems encrypted: \"%s\"" % inputFile,
-			logging.DEBUG, "File encryption", settings, logger, feedback)
+			logging.DEBUG, "File encryption", settings, logger, dialog)
 		reportLogging("File \"%s\" seems to be encrypted already. "
 			"Are you sure you want to (possibly) encrypt it again?" % tail,
-			logging.WARNING, "File enncryption", settings, logger, feedback)
+			logging.WARNING, "File enncryption", settings, logger, dialog)
 
 	outputfname = fileMap.createEncFile(inputFile, obfuscate, twice)
 	# for safety make encrypted file read-only
 	os.chmod(outputfname, stat.S_IRUSR)
 	ohead, otail = os.path.split(outputfname)
 	reportLogging("Plaintext file/path: \"%s\"" % inputFile,
-		logging.DEBUG, "File encryption", settings, logger, feedback)
+		logging.DEBUG, "File encryption", settings, logger, dialog)
 	reportLogging("Encrypted file/path: \"%s\"" % outputfname,
-		logging.DEBUG, "File encryption", settings, logger, feedback)
+		logging.DEBUG, "File encryption", settings, logger, dialog)
 	if twice:
 		twicetext = " twice"
 	else:
 		twicetext = ""
 	reportLogging("File \"%s\" has been encrypted successfully%s. Encrypted "
 		"file \"%s\" was produced." % (tail,twicetext,otail), logging.NOTSET,
-		"File encryption", settings, logger, feedback)
+		"File encryption", settings, logger, dialog)
 	safe = True
 	if settings.SArg:
-		safe = safetyCheck(inputFile, outputfname, fileMap, settings, logger, feedback)
-	if safe and settings.WArg:
-		shred(inputFile, 3, settings, logger, feedback)
+		safe = safetyCheck(inputFile, outputfname, fileMap, settings, logger, dialog)
+	if safe and settings.WArg and settings.EArg:
+		shred(inputFile, 3, settings, logger, dialog)
 	return outputfname
 
-def	safetyCheck(plaintextFname, encryptedFname, fileMap, settings, logger, feedback):
+def	safetyCheck(plaintextFname, encryptedFname, fileMap, settings, logger, dialog):
 	"""
 	check if previous encryption worked by
 	renaming plaintextFname file to plaintextFname.<random number>.org
@@ -674,24 +702,24 @@ def	safetyCheck(plaintextFname, encryptedFname, fileMap, settings, logger, feedb
 	randomB64 = base64.urlsafe_b64encode(randomBin).replace("=", "-")
 	originalFname = plaintextFname + "." + randomB64 + ".orignal"
 	os.rename(plaintextFname, originalFname)
-	decryptedFname = decryptFile(encryptedFname, settings, fileMap, logger, feedback)
+	decryptedFname = decryptFile(encryptedFname, settings, fileMap, logger, dialog)
 	aresame = filecmp.cmp(decryptedFname, originalFname, shallow=False)
 	ihead, itail = os.path.split(plaintextFname)
 	ohead, otail = os.path.split(encryptedFname)
 	if aresame:
 		reportLogging("Safety check of file \"%s\" (\"%s\") was successful." %
 			(otail,itail),
-			logging.INFO, "File encryption", settings, logger, feedback)
+			logging.INFO, "File encryption", settings, logger, dialog)
 	else:
 		reportLogging("Fatal error: Safety check of file \"%s\" (\"%s\") failed! "
 			"You must inestigate. Encryption was flawed!" %
 			(otail,itail),
-			logging.CRITICAL, "File encryption", settings, logger, feedback)
+			logging.CRITICAL, "File encryption", settings, logger, dialog)
 	os.remove(decryptedFname)
 	os.rename(originalFname, plaintextFname)
 	return aresame
 
-def convertFile(inputFile, settings, fileMap, logger, feedback):
+def convertFile(inputFile, settings, fileMap, logger, dialog):
 	"""
 	Encrypt or decrypt one file.
 
@@ -699,36 +727,40 @@ def convertFile(inputFile, settings, fileMap, logger, feedback):
 	"""
 	if settings.DArg:
 		# decrypt by choice
-		decryptFile(inputFile, settings, fileMap, logger, feedback)
+		decryptFile(inputFile, settings, fileMap, logger, dialog)
 	elif settings.MArg:
 		# encrypt (name only) by choice
-		encryptFileNameOnly(inputFile, settings, fileMap, logger, feedback)
+		encryptFileNameOnly(inputFile, settings, fileMap, logger, dialog)
 	elif settings.NArg:
 		# decrypt (name only) by choice
-		decryptFileNameOnly(inputFile, settings, fileMap, logger, feedback)
-	elif settings.OArg:
+		decryptFileNameOnly(inputFile, settings, fileMap, logger, dialog)
+	elif settings.EArg and settings.OArg:
 		# encrypt and obfuscate by choice
-		encryptFile(inputFile, settings, fileMap, True, settings.XArg, logger, feedback)
-	elif settings.EArg:
+		encryptFile(inputFile, settings, fileMap, True, settings.XArg, logger, dialog)
+	elif settings.EArg and not settings.OArg:
 		# encrypt by choice
-		encryptFile(inputFile, settings, fileMap, False, settings.XArg, logger, feedback)
+		encryptFile(inputFile, settings, fileMap, False, settings.XArg, logger, dialog)
 	else:
-		hint = analyzeFilename(inputFile, settings, logger, feedback)
+		hint = analyzeFilename(inputFile, settings, logger, dialog)
 		if hint == "d":
 			# decrypt by default
-			decryptFile(inputFile, settings, fileMap, logger, feedback)
+			settings.DArg = True
+			decryptFile(inputFile, settings, fileMap, logger, dialog)
+			settings.DArg = False
 		else:
 			# encrypt by default
-			encryptFile(inputFile, settings, fileMap, False, settings.XArg, logger, feedback)
+			settings.EArg = True
+			encryptFile(inputFile, settings, fileMap, False, settings.XArg, logger, dialog)
+			settings.EArg = False
 
-def doWork(trezor, settings, fileMap, logger, feedback):
+def doWork(trezor, settings, fileMap, logger, dialog):
 	reportLogging("Time entering doWork(): %s" % datetime.datetime.now(),
-		logging.DEBUG, "Debug", settings, logger, feedback)
+		logging.DEBUG, "Debug", settings, logger, dialog)
 	for inputFile in settings.inputFiles:
 		try:
 			reportLogging("Working on file: %s" % inputFile,
-				logging.DEBUG, "Debug", settings, logger, feedback)
-			convertFile(inputFile, settings, fileMap, logger, feedback)
+				logging.DEBUG, "Debug", settings, logger, dialog)
+			convertFile(inputFile, settings, fileMap, logger, dialog)
 		except PinException:
 			msgBox = QtGui.QMessageBox(text="Invalid PIN")
 			msgBox.exec_()
@@ -736,22 +768,24 @@ def doWork(trezor, settings, fileMap, logger, feedback):
 		except CallException:
 			#button cancel on Trezor, so exit
 			sys.exit(6)
+		except IOError, e:
+			reportLogging("IO error: %s" % e, logging.CRITICAL,
+				"Critical Exception", settings, logger, dialog)
+			traceback.print_exc() # prints to stderr
 		except Exception, e:
-			reportLogging(e.message, logging.CRITICAL,
-				"Critical Exception", settings, logger, feedback)
+			reportLogging("Critical error: %s" % e, logging.CRITICAL,
+				"Critical Exception", settings, logger, dialog)
 			traceback.print_exc() # prints to stderr
 	reportLogging("Time leaving doWork(): %s" % datetime.datetime.now(),
-		logging.DEBUG, "Debug", settings, logger, feedback)
+		logging.DEBUG, "Debug", settings, logger, dialog)
 
 def processAllFromApply(dialog, trezor, settings, fileMap, logger):
 	settings.gui2Settings(dialog,trezor)
-	feedback = Feedback()
 	reportLogging("Apply button was clicked",
-		logging.DEBUG, "Debug", settings, logger, feedback)
-	processAll(trezor, settings, fileMap, logger, feedback)
+		logging.DEBUG, "Debug", settings, logger, dialog)
+	processAll(trezor, settings, fileMap, logger, dialog)
 	reportLogging("Apply button was processed, returning to GUI",
-		logging.DEBUG, "Debug", settings, logger, feedback)
-	return feedback.getFeedback()
+		logging.DEBUG, "Debug", settings, logger, dialog)
 
-def processAll(trezor, settings, fileMap, logger, feedback):
-	doWork(trezor, settings, fileMap, logger, feedback)
+def processAll(trezor, settings, fileMap, logger, dialog=None):
+	doWork(trezor, settings, fileMap, logger, dialog)

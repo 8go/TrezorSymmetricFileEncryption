@@ -1,6 +1,7 @@
 import os
 import os.path
 import sys
+import stat
 import logging
 import struct
 import cPickle
@@ -72,6 +73,7 @@ class FileMap(object):
 		if os.path.isfile(fname):
 			self.logger.warning("File %s exists and decrytion will overwrite it.", fname)
 			if not os.access(fname, os.W_OK):
+				#os.chmod(fname, stat.S_IRUSR | stat.S_IWUSR )
 				self.logger.error("File %s cannot be written. "
 					"No write permissions. Skipping it.", fname)
 				return
@@ -218,12 +220,13 @@ class FileMap(object):
 			fname += basics.TSFEFILEEXT
 
 		if os.path.isfile(fname):
-			self.logger.warning("File %s exists and decrytion will overwrite it.", fname)
+			self.logger.warning("File %s exists and encryption will overwrite it.", fname)
 			if not os.access(fname, os.W_OK):
-				self.logger.error("File %s cannot be written. "
-					"No write permissions. Skipping it.", fname)
-				raise ValueError("File " + fname + " cannot be written. "
-					"No write permissions. Skipping it.")
+				os.chmod(fname, stat.S_IRUSR | stat.S_IWUSR )
+				#self.logger.error("File %s cannot be written. "
+				#	"No write permissions. Skipping it.", fname)
+				#raise IOError("File " + fname + " cannot be written. "
+				#	"No write permissions. Skipping it.")
 
 		with file(fname, "wb") as f:
 			version = basics.TSFEFILEFORMATVERSION
@@ -376,8 +379,8 @@ class FileMap(object):
 		# In order to handle blobs larger than 1023 we junk the blobs
 		encrypted = ""
 		first = True
-		curr, max = 0, len(blob) / self.MAXUNPADDEDTREZORENCRYPTSIZE
 		splits=[blob[x:x+self.MAXUNPADDEDTREZORENCRYPTSIZE] for x in range(0,len(blob),self.MAXUNPADDEDTREZORENCRYPTSIZE)]
+		curr, max = 0, len(splits)
 		for junk in splits:
 			padded = Padding(BLOCKSIZE).pad(junk)
 			try:
@@ -414,13 +417,13 @@ class FileMap(object):
 		ukeystring = keystring.decode("utf-8")
 		iv, encryptedblob = encryptedblob[:BLOCKSIZE], encryptedblob[BLOCKSIZE:]
 		# we junk the input, decrypt and reassemble the plaintext
-		curr, max = 0, len(encryptedblob) / self.MAXPADDEDTREZORENCRYPTSIZE
 		blob = ""
 		first = True
 		self.logger.debug("Press confirm on Trezor device for second level "
 			"file decryption on Trezor device itself (if necessary).")
 		self.logger.debug("Trezor decryption: encrypted-size = %d", len(encryptedblob))
 		splits=[encryptedblob[x:x+self.MAXPADDEDTREZORENCRYPTSIZE] for x in range(0,len(encryptedblob),self.MAXPADDEDTREZORENCRYPTSIZE)]
+		curr, max = 0, len(splits)
 		for junk in splits:
 			try:
 				plain = self.trezor.decrypt_keyvalue(Magic.levelTwoNode,
