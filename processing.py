@@ -12,6 +12,8 @@ import base64
 import hashlib
 import filecmp
 
+from Crypto import Random
+
 from PyQt4 import QtCore
 from PyQt4 import QtGui
 
@@ -67,7 +69,7 @@ class Settings(object):
 		self.MArg = dialog.encFn()
 		self.OArg = dialog.encObf()
 		self.XArg = dialog.encTwice()
-		self.SArg = dialog.encSafe()
+		self.SArg = dialog.encSafe() or dialog.decSafe()
 		self.WArg = dialog.encWipe() or dialog.decWipe()
 		self.PArg = q2s(dialog.pw1())
 		self.RArg = False
@@ -101,6 +103,7 @@ class Settings(object):
 		dialog.setEncObf(self.OArg and self.EArg)
 		dialog.setEncTwice(self.XArg and self.EArg)
 		dialog.setEncSafe(self.SArg and self.EArg)
+		dialog.setDecSafe(self.SArg and self.DArg)
 		dialog.setEncWipe(self.WArg and self.EArg)
 		dialog.setPw1(self.PArg)
 		dialog.setPw2(self.PArg)
@@ -225,7 +228,9 @@ def usage():
 		-s, --safety
 				doublechecks the encryption process by decrypting the just
 				encrypted file immediately and comparing it to original file;
-				only relevant for `-e` and `-o`; ignored in all other cases.
+				doublechecks the decryption process by encrypting the just
+				decrypted file immediately and comparing it to original file;
+				Ignored for `-m` and `-n`.
 				Primarily useful for testing.
 		-w, --wipe
 				shred the inputfile after creating the output file
@@ -429,9 +434,8 @@ def parseArgs(argv, settings, logger):
 		reportLogging("You cannot specify -o, -2, -s or -w with -n", logging.CRITICAL,
 			"Wrong arguments", settings, logger)
 		sys.exit(2)
-	if (settings.DArg and settings.OArg) or (settings.DArg and settings.XArg) or \
-		(settings.DArg and settings.SArg):
-		reportLogging("You cannot specify -o, -2, or -s with -d", logging.CRITICAL,
+	if (settings.DArg and settings.OArg) or (settings.DArg and settings.XArg):
+		reportLogging("You cannot specify -o or -2 with -d", logging.CRITICAL,
 			"Wrong arguments", settings, logger)
 		sys.exit(2)
 	settings.inputFiles = args
@@ -679,7 +683,7 @@ def decryptFile(inputFile, settings, fileMap, logger, dialog):
 			logging.WARNING, "File decryption", settings, logger, dialog)
 		return None
 	else:
-		outputfname = fileMap.createDecFile(inputFile)
+		outputfname, isobfuscated, istwice, outerKey, outerIv, innerIv = fileMap.createDecFile(inputFile)
 		# for safety make decrypted file rw to user only
 		os.chmod(outputfname, stat.S_IRUSR | stat.S_IWUSR )
 		ohead, otail = os.path.split(outputfname)
@@ -690,10 +694,22 @@ def decryptFile(inputFile, settings, fileMap, logger, dialog):
 		reportLogging("File \"%s\" has been decrypted successfully. "
 			"Decrypted file \"%s\" was produced." % (tail, otail),
 			logging.NOTSET, "File decryption", settings, logger, dialog)
-		if os.path.isfile(inputFile) and settings.WArg and settings.DArg:
+		safe = True
+		if settings.SArg and settings.DArg:
+			safe = safetyCheckDecrypt(inputFile, outputfname, fileMap, isobfuscated, istwice, outerKey, outerIv, innerIv, settings, logger, dialog)
+		if safe and os.path.isfile(inputFile) and settings.WArg and settings.DArg:
 			# encrypted files are usually read-only, make rw before shred
 			os.chmod(inputFile, stat.S_IRUSR | stat.S_IWUSR )
 			shred(inputFile, 3, settings, logger, dialog)
+		rng = Random.new()
+		# overwrite with nonsense to shred memory
+		outerKey = rng.read(len(outerKey)) # file_map.KEYSIZE
+		outerIv = rng.read(len(outerIv))
+		if innerIv is not None:
+			innerIv = rng.read(len(innerIv))
+		del outerKey
+		del outerIv
+		del innerIv
 	return outputfname
 
 def encryptFileNameOnly(inputFile, settings, fileMap, logger, dialog):
@@ -734,7 +750,7 @@ def encryptFileNameOnly(inputFile, settings, fileMap, logger, dialog):
 		logging.NOTSET, "Filename obfuscation", settings, logger, dialog)
 	return obfFileName
 
-def encryptFile(inputFile, settings, fileMap, obfuscate, twice, logger, dialog):
+def encryptFile(inputFile, settings, fileMap, obfuscate, twice, outerKey, outerIv, innerIv, logger, dialog):
 	"""
 	Encrypt a file.
 	if obfuscate == false then keep the output filename in plain text and add .tsfe
@@ -748,6 +764,19 @@ def encryptFile(inputFile, settings, fileMap, obfuscate, twice, logger, dialog):
 	@param obfuscate: bool to indicate if an obfuscated filename (True) is
 		desired or a plaintext filename (False)
 	@type obfuscate: C{bool}
+	@param twice: bool to indicate if file should be encrypted twice
+	@type twice: C{bool}
+	@param outerKey: usually None,
+		if the same file is encrypted twice
+		it is different be default, by design, because the outerKey and outerIv are random.
+		If one wants to produce
+		an identical encrypted file multiple time (e.g. for a safetyCheckDec())
+		then one needs to fix the outerKey and outerIv.
+		If you want to give it a fixed value, pass it to the function,
+		otherwise set it to None.
+	@param outerIv: see outerKey
+	@param outerKey: 32 bytes
+	@param outerIv: 16 bytes
 	@param logger: holds logger for where to log info/warnings/errors
 	@type logger: L{logging.Logger}
 	@param dialog: holds GUI window for where to log info/warnings/errors
@@ -795,7 +824,7 @@ def encryptFile(inputFile, settings, fileMap, obfuscate, twice, logger, dialog):
 			"Are you sure you want to (possibly) encrypt it again?" % tail,
 			logging.WARNING, "File enncryption", settings, logger, dialog)
 
-	outputfname = fileMap.createEncFile(inputFile, obfuscate, twice)
+	outputfname = fileMap.createEncFile(inputFile, obfuscate, twice, outerKey, outerIv, innerIv)
 	# for safety make encrypted file read-only
 	os.chmod(outputfname, stat.S_IRUSR)
 	ohead, otail = os.path.split(outputfname)
@@ -811,13 +840,13 @@ def encryptFile(inputFile, settings, fileMap, obfuscate, twice, logger, dialog):
 		"file \"%s\" was produced." % (tail,twicetext,otail), logging.NOTSET,
 		"File encryption", settings, logger, dialog)
 	safe = True
-	if settings.SArg:
-		safe = safetyCheck(inputFile, outputfname, fileMap, settings, logger, dialog)
+	if settings.SArg and settings.EArg:
+		safe = safetyCheckEncrypt(inputFile, outputfname, fileMap, settings, logger, dialog)
 	if safe and settings.WArg and settings.EArg:
 		shred(inputFile, 3, settings, logger, dialog)
 	return outputfname
 
-def	safetyCheck(plaintextFname, encryptedFname, fileMap, settings, logger, dialog):
+def	safetyCheckEncrypt(plaintextFname, encryptedFname, fileMap, settings, logger, dialog):
 	"""
 	check if previous encryption worked by
 	renaming plaintextFname file to plaintextFname.<random number>.org
@@ -866,6 +895,74 @@ def	safetyCheck(plaintextFname, encryptedFname, fileMap, settings, logger, dialo
 	os.rename(originalFname, plaintextFname)
 	return aresame
 
+def	safetyCheckDecrypt(encryptedFname, plaintextFname, fileMap, isobfuscated, istwice, outerKey, outerIv, innerIv, settings, logger, dialog):
+	"""
+	check if previous decryption worked by
+	renaming encryptedFname file to encryptedFname.<random number>.org
+	encrypting file named plaintextFname producing new file newencryptedFname
+	comparing/diffing newencryptedFname to original file now named encryptedFname.<random number>.org
+	removing decrypted file newencryptedFname
+	renaming original file encryptedFname.<random number>.org back to input encryptedFname
+
+	@param encryptedFname: name of existing encrypted file whose previous decryption needs to be double-checked
+	@type encryptedFname: C{string}
+	@param plaintextFname: name of existing plaintext file (i.e. the encrypted file decrypted)
+	@type plaintextFname: C{string}
+	@param fileMap: object to use to handle file format of encrypted file
+	@type fileMap: L{file_map.FileMap}
+	@param obfuscate: bool to indicate if encryptedFname was obfuscated  (True) or not  (False) before
+	@type obfuscate: C{bool}
+	@param twice: bool to indicate if encryptedFname was encrypted twice before
+	@type twice: C{bool}
+	@param outerKey: usually None,
+		if the same file is encrypted twice
+		it is different be default, by design, because the outerKey and outerIv are random.
+		If one wants to produce
+		an identical encrypted file multiple time (e.g. for a safetyCheckDec())
+		then one needs to fix the outerKey and outerIv.
+		If you want to give it a fixed value, pass it to the function,
+		otherwise set it to None.
+	@param outerIv: see outerKey
+	@param outerKey: 32 bytes
+	@param outerIv: 16 bytes
+	@param settings: holds settings for how to log info/warnings/errors
+	@type settings: L{Settings}
+	@param logger: holds logger for where to log info/warnings/errors
+	@type logger: L{logging.Logger}
+	@param dialog: holds GUI window for where to log info/warnings/errors
+	@type dialog: L{dialogs.Dialog}
+	@returns: True if safety check passes successfuly, False otherwise
+	@rtype: C{bool}
+	"""
+	reportLogging("Safety check on decrypted file \"%s\" with "
+		"obfuscation = %s and double-encryption = %s." %
+		(encryptedFname, isobfuscated, istwice),
+		logging.DEBUG, "File decryption", settings, logger, dialog)
+	urandom_entropy = os.urandom(64)
+	randomBin = hashlib.sha256(urandom_entropy).digest()
+	# base85 encoding not yet implemented in Python 2.7, (requires Python 3+)
+	# so we use base64 encoding
+	# replace the base64 buffer char =
+	randomB64 = base64.urlsafe_b64encode(randomBin).replace("=", "-")
+	originalFname = encryptedFname + "." + randomB64 + ".orignal"
+	os.rename(encryptedFname, originalFname)
+	newencryptedFname = encryptFile(plaintextFname, settings, fileMap, isobfuscated, istwice, outerKey, outerIv, innerIv, logger, dialog)
+	aresame = filecmp.cmp(newencryptedFname, originalFname, shallow=False)
+	ihead, itail = os.path.split(encryptedFname)
+	ohead, otail = os.path.split(plaintextFname)
+	if aresame:
+		reportLogging("Safety check of file \"%s\" (\"%s\") was successful." %
+			(otail,itail),
+			logging.INFO, "File decryption", settings, logger, dialog)
+	else:
+		reportLogging("Fatal error: Safety check of file \"%s\" (\"%s\") failed! "
+			"You must inestigate. Decryption was flawed!" %
+			(otail,itail),
+			logging.CRITICAL, "File decryption", settings, logger, dialog)
+	os.remove(newencryptedFname)
+	os.rename(originalFname, encryptedFname)
+	return aresame
+
 def convertFile(inputFile, settings, fileMap, logger, dialog):
 	"""
 	Encrypt or decrypt one file.
@@ -894,10 +991,10 @@ def convertFile(inputFile, settings, fileMap, logger, dialog):
 		decryptFileNameOnly(inputFile, settings, fileMap, logger, dialog)
 	elif settings.EArg and settings.OArg:
 		# encrypt and obfuscate by choice
-		encryptFile(inputFile, settings, fileMap, True, settings.XArg, logger, dialog)
+		encryptFile(inputFile, settings, fileMap, True, settings.XArg, None, None, None, logger, dialog)
 	elif settings.EArg and not settings.OArg:
 		# encrypt by choice
-		encryptFile(inputFile, settings, fileMap, False, settings.XArg, logger, dialog)
+		encryptFile(inputFile, settings, fileMap, False, settings.XArg, None, None, None, logger, dialog)
 	else:
 		hint = analyzeFilename(inputFile, settings, logger, dialog)
 		if hint == "d":
@@ -908,7 +1005,7 @@ def convertFile(inputFile, settings, fileMap, logger, dialog):
 		else:
 			# encrypt by default
 			settings.EArg = True
-			encryptFile(inputFile, settings, fileMap, False, settings.XArg, logger, dialog)
+			encryptFile(inputFile, settings, fileMap, False, settings.XArg, None, None, None, logger, dialog)
 			settings.EArg = False
 
 def doWork(settings, fileMap, logger, dialog):

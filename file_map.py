@@ -48,6 +48,7 @@ class FileMap(object):
 		self.trezor = trezor
 		self.outerKey = None # outer AES-CBC key, 1st-level encryption
 		self.outerIv = None  # IV for data blob encrypted with outerKey
+		self.innerIv = None # IV for inner encryption on Trezor device
 		self.version = None
 		self.versionSw = None
 		self.noOfEncryptions = None
@@ -90,10 +91,24 @@ class FileMap(object):
 				raise IOError("File IO problem - not enough data written "
 					"(file=%s, target=%d, done=%d)" % (fname, s, f.tell()))
 			self.logger.debug("Decryption wrote %d bytes to file %s.",s,fname)
+		# each time we encrypt a file it is different, because the outerkey
+		# and the outerIv are different. That is by design.
+		# In order to perform a safetyCheck we need the outerkey and outerIv
+		# to produce an identical encrypted file.
+		outerKey = self.outerKey
+		innerIv = self.innerIv
 		# overwrite with nonsense to shred memory
 		rng = Random.new()
 		self.outerKey = rng.read(KEYSIZE)
-		return fname # output file name
+		if self.innerIv is not None:
+			self.innerIv = rng.read(BLOCKSIZE)
+		if self.noOfEncryptions == 2:
+			isTwice = True
+		else:
+			isTwice = False
+		# isObfuscated, isTwice, outerKey, self.outerIv are only used by the
+		# safetyCheckDecrypt()
+		return (fname, isObfuscated, isTwice, outerKey, self.outerIv, innerIv)
 
 	def loadBlobFromEncFile(self, fname):
 		"""
@@ -173,11 +188,20 @@ class FileMap(object):
 
 			self.blob = self.decryptOuter(encrypted, self.outerIv)
 
-	def createEncFile(self, fname, obfuscate, twice):
+	def createEncFile(self, fname, obfuscate, twice, outerKey = None, outerIv = None, innerIv = None):
 		"""
 		read plaintext file, then open, write and save encrypted file
 		@param fname: name of the plaintext file to encrypt
 		@param twice: True if data should be encrypted twice
+		@param outerKey: usually None,
+			if the same file is encrypted twice
+			it is different be default, by design, because the outerKey and
+			outerIv and innerIv are random.
+			If one wants to produce
+			an identical encrypted file multiple time (e.g. for a safetyCheckDec())
+			then one needs to fix the outerKey and outerIv.
+		@param outerIv: see outerKey
+		@param innerIv: see outerKey
 		"""
 
 		with open(fname, 'rb') as f:
@@ -194,14 +218,16 @@ class FileMap(object):
 		# encrypt
 		rng = Random.new()
 		self.outerKey = rng.read(KEYSIZE)
+		if outerKey is not None:
+			self.outerKey = outerKey
 		self.versionSw = basics.TSFEVERSION
 		self.noOfEncryptions = 1
-		outputfname = self.saveBlobToEncFile(fname, obfuscate, twice)
+		outputfname = self.saveBlobToEncFile(fname, obfuscate, twice, outerKey, outerIv, innerIv)
 		# overwrite with nonsense to shred memory
 		self.outerKey = rng.read(KEYSIZE)
 		return outputfname # output file name
 
-	def saveBlobToEncFile(self, fname, obfuscate, twice):
+	def saveBlobToEncFile(self, fname, obfuscate, twice, outerKey = None, outerIv = None, innerIv = None):
 		"""
 		Take blob, encrypt blob, and write encrypted data to disk.
 		Requires Trezor connected.
@@ -211,12 +237,21 @@ class FileMap(object):
 		@param obfuscate: bool to indicate if an obfuscated filename (True)
 			is desired or a plaintext filename (False) for the encrypted file
 		@param twice: True if data should be encrypted twice
+		@param outerKey: usually None,
+			if the same file is encrypted twice
+			it is different be default, by design, because the outerKey and outerIv are random.
+			If one wants to produce
+			an identical encrypted file multiple time (e.g. for a safetyCheckDec())
+			then one needs to fix the outerKey and outerIv.
+		@param outerIv: see outerKey
 
 		@throws IOError: if writing file failed
 		"""
 		assert len(self.outerKey) == KEYSIZE
 		rnd = Random.new()
 		self.outerIv = rnd.read(BLOCKSIZE)
+		if outerIv is not None:
+			self.outerIv = outerIv
 		wrappedKey = self.wrapKey(self.outerKey,self.outerIv)
 
 		if obfuscate:
@@ -253,7 +288,7 @@ class FileMap(object):
 			encrypted = self.encryptOuter(self.blob, self.outerIv)
 
 			if self.noOfEncryptions == 2:
-				encrypted = self.encryptOnTrezorDevice(encrypted, Magic.levelTwoKey)
+				encrypted = self.encryptOnTrezorDevice(encrypted, Magic.levelTwoKey, innerIv)
 
 			hmacDigest = hmac.new(self.outerKey, encrypted, hashlib.sha256).digest()
 			f.write(b'\x00\x00\x00\x00') # unused, fill 4 bytes with 0
@@ -366,7 +401,7 @@ class FileMap(object):
 			keyToWrap, ask_on_encrypt=False, ask_on_decrypt=True, iv=iv)
 		return ret
 
-	def encryptOnTrezorDevice(self, blob, keystring):
+	def encryptOnTrezorDevice(self, blob, keystring, innerIv = None):
 		"""
 		Encrypt data. Does PKCS#5 padding before encryption.
 		Store IV as first block.
@@ -377,6 +412,8 @@ class FileMap(object):
 		self.logger.debug('time entering encryptOnTrezorDevice: %s', datetime.datetime.now())
 		rnd = Random.new()
 		rndBlock = rnd.read(BLOCKSIZE)
+		if innerIv is not None:
+			rndBlock = innerIv
 		ukeystring = keystring.decode("utf-8")
 		# minimum size of unpadded plaintext as input to trezor.encrypt_keyvalue() is 0    ==> padded that is 16 bytes
 		# maximum size of unpadded plaintext as input to trezor.encrypt_keyvalue() is 1023 ==> padded that is 1024 bytes
@@ -449,4 +486,5 @@ class FileMap(object):
 		if len(blob) == 0:
 			raise ValueError("Decrypting data failed. Wrong Trezor device?")
 		self.logger.debug('time leaving decryptOnTrezorDevice: %s', datetime.datetime.now())
+		self.innerIv = iv
 		return blob

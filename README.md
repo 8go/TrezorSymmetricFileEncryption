@@ -15,7 +15,7 @@ Note that it is software, currently in alpha stage.
 
   * Trezor convenience
   * Trezor security
-  * One Trezor for all your needs: gpg, ssh, **symmetric encryption**, etc.
+  * One Trezor for all your needs: [gpg](https://github.com/romanz/trezor-agent), [ssh](https://github.com/romanz/trezor-agent), **symmetric encryption**, etc.
   * Encrypt your files for your use, guarantee your privacy
   * Requires confirmation button click on Trezor device to perform decrypt operation.
   * For the paranoid there is now an option to encrypt the file(s) twice.
@@ -29,15 +29,13 @@ Note that it is software, currently in alpha stage.
     encryption. The actual en/decryption takes place on the Trezor chip.
     This paranoid mode is significantly slower than the regular mode.
   * It supports both GUI mode and Terminal mode.
-  * Even in Terminal mode the PIN, if required, is entered through a small GUI window.
-    For safety we also recommend to enter the passphrase through a small GUI
-    window even in Terminal mode as it is not a good practice to place a
-    passphrase on the command line.
   * Since it is a program that has a full CLI (command line interface)
     it is easy to create scripts or to automate workflows. Keep in mind though
-    that you will have to confirm on the trezor by clicking its `Confirm` button.
-  * Optionally obfuscates/encrypts filenames on encryption to hide meta-data (i.e. the file names)
-  * Use it before and after you store sensitive information on DropBox or Google Drive
+    that you will have to confirm on the Trezor by clicking its `Confirm` button.
+  * Optionally obfuscates/encrypts filenames on encryption to hide meta-data
+    (i.e. the file names)
+  * Use it before and after you store sensitive information on
+    DropBox, Google Drive or similar.
 
 # Screenshot
 
@@ -118,7 +116,9 @@ TrezorSymmetricFileEncryption.py [-v] [-h] [-l <level>] [-t] [-e | -o | -d | -m 
     -s, --safety
             doublechecks the encryption process by decrypting the just
             encrypted file immediately and comparing it to original file;
-            only relevant for `-e` and `-o`; ignored in all other cases.
+            doublechecks the decryption process by encrypting the just
+            decrypted file immediately and comparing it to original file;
+            Ignored for `-m` and `-n`.
             Primarily useful for testing.
     -w, --wipe
             shred the inputfile after creating the output file

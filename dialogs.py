@@ -45,6 +45,7 @@ class Dialog(QtGui.QDialog, Ui_Dialog):
 		self.checkBoxEnc2.toggled.connect(self.validateEnc2)
 		self.checkBoxEncS.toggled.connect(self.validateEncS)
 		self.checkBoxEncW.toggled.connect(self.validateEncW)
+		self.checkBoxDecS.toggled.connect(self.validateDecS)
 		self.checkBoxDecW.toggled.connect(self.validateDecW)
 
 		self.checkBoxEncO.setEnabled(False)
@@ -52,6 +53,7 @@ class Dialog(QtGui.QDialog, Ui_Dialog):
 		self.checkBoxEncS.setEnabled(False)
 		self.checkBoxEncW.setEnabled(False)
 		self.checkBoxDecW.setEnabled(False)
+		self.checkBoxDecS.setEnabled(False)
 
 		self.masterEdit1.textChanged.connect(self.validate)
 		self.masterEdit2.textChanged.connect(self.validate)
@@ -89,7 +91,7 @@ class Dialog(QtGui.QDialog, Ui_Dialog):
 		QtGui.QShortcut(QtGui.QKeySequence("Ctrl+D"), self, self.setDec) #
 		QtGui.QShortcut(QtGui.QKeySequence("Ctrl+O"), self, self.setEncObf) #
 		QtGui.QShortcut(QtGui.QKeySequence("Ctrl+2"), self, self.setEncTwice) #
-		QtGui.QShortcut(QtGui.QKeySequence("Ctrl+T"), self, self.setEncSafe) #
+		QtGui.QShortcut(QtGui.QKeySequence("Ctrl+T"), self, self.setEncDecSafe) #
 		QtGui.QShortcut(QtGui.QKeySequence("Ctrl+W"), self, self.setEncDecWipe) #
 		QtGui.QShortcut(QtGui.QKeySequence("Ctrl+M"), self, self.setEncFn) #
 		QtGui.QShortcut(QtGui.QKeySequence("Ctrl+N"), self, self.setDecFn) #
@@ -126,6 +128,7 @@ class Dialog(QtGui.QDialog, Ui_Dialog):
 		self.checkBoxEncS.setEnabled(False)
 		self.checkBoxEncW.setEnabled(False)
 		self.checkBoxDecW.setEnabled(True)
+		self.checkBoxDecS.setEnabled(True)
 		self.validate()
 
 	def validateDecFilename(self):
@@ -137,22 +140,28 @@ class Dialog(QtGui.QDialog, Ui_Dialog):
 			self.checkBoxEncS.setChecked(False)
 		if self.checkBoxEncW.isChecked():
 			self.checkBoxEncW.setChecked(False)
+		if self.checkBoxDecS.isChecked():
+			self.checkBoxDecS.setChecked(False)
 		if self.checkBoxDecW.isChecked():
 			self.checkBoxDecW.setChecked(False)
 		self.checkBoxEncO.setEnabled(False)
 		self.checkBoxEnc2.setEnabled(False)
 		self.checkBoxEncS.setEnabled(False)
 		self.checkBoxEncW.setEnabled(False)
+		self.checkBoxDecS.setEnabled(False)
 		self.checkBoxDecW.setEnabled(False)
 		self.validate()
 
 	def validateEncFile(self):
+		if self.checkBoxDecS.isChecked():
+			self.checkBoxDecS.setChecked(False)
 		if self.checkBoxDecW.isChecked():
 			self.checkBoxDecW.setChecked(False)
 		self.checkBoxEncO.setEnabled(True)
 		self.checkBoxEnc2.setEnabled(True)
 		self.checkBoxEncS.setEnabled(True)
 		self.checkBoxEncW.setEnabled(True)
+		self.checkBoxDecS.setEnabled(False)
 		self.checkBoxDecW.setEnabled(False)
 		self.validate()
 
@@ -165,12 +174,15 @@ class Dialog(QtGui.QDialog, Ui_Dialog):
 			self.checkBoxEncS.setChecked(False)
 		if self.checkBoxEncW.isChecked():
 			self.checkBoxEncW.setChecked(False)
+		if self.checkBoxDecS.isChecked():
+			self.checkBoxDecS.setChecked(False)
 		if self.checkBoxDecW.isChecked():
 			self.checkBoxDecW.setChecked(False)
 		self.checkBoxEncO.setEnabled(False)
 		self.checkBoxEnc2.setEnabled(False)
 		self.checkBoxEncS.setEnabled(False)
 		self.checkBoxEncW.setEnabled(False)
+		self.checkBoxDecS.setEnabled(False)
 		self.checkBoxDecW.setEnabled(False)
 		self.validate()
 
@@ -207,6 +219,14 @@ class Dialog(QtGui.QDialog, Ui_Dialog):
 				"be shredded and permanently deleted after encryption. "
 				"Remove this option if you are uncertain or don't understand.", logging.WARN,
 				"Dangerous arguments", self.settings, self.logger, self)
+
+	def validateDecS(self):
+		if self.checkBoxEncS.isChecked():
+				reportLogging("You have selected the option `--safety`. "
+				"After decrypting the file(s) the file(s) will immediately "
+				"be encrypted and the output compared to the original file(s). "
+				"This safety check definitely guarantees that all is well.", logging.INFO,
+				"Arguments", self.settings, self.logger, self)
 
 	def validateDecW(self):
 		if self.checkBoxDecW.isChecked():
@@ -272,6 +292,18 @@ class Dialog(QtGui.QDialog, Ui_Dialog):
 
 	def setEncSafe(self, arg=True):
 		self.checkBoxEncS.setChecked(arg)
+
+	def decSafe(self):
+		return self.checkBoxDecS.isChecked()
+
+	def setDecSafe(self, arg=True):
+		self.checkBoxDecS.setChecked(arg)
+
+	def setEncDecSafe(self, arg=True):
+		if self.enc():
+			self.setEncSafe(arg)
+		if self.dec():
+			self.setDecSafe(arg)
 
 	def encWipe(self):
 		return self.checkBoxEncW.isChecked()

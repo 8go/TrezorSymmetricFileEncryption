@@ -82,8 +82,8 @@ if [ $# -ge 1 ]; then
     for size in "$@"; do
         ls __${size}.img 2> /dev/null # file should not exist
     done
-    echo "Step 12: Decrypting with wipe: " ./TrezorSymmetricFileEncryption.py -t  -d -w -p ${passphrase} "${encryptedfilearray[@]}"
-    ./TrezorSymmetricFileEncryption.py -t  -d -w -p ${passphrase} "${encryptedfilearray[@]}" &> /dev/null
+    echo "Step 12: Decrypting with safety check and wipe: " ./TrezorSymmetricFileEncryption.py -t  -d -w -p ${passphrase} "${encryptedfilearray[@]}"
+    ./TrezorSymmetricFileEncryption.py -t  -d -s -w -p ${passphrase} "${encryptedfilearray[@]}" &> /dev/null
     for size in "$@"; do
         ls __${size}.img.tsfe 2> /dev/null # file should not exist
         diff __${size}.img __${size}.img.org
@@ -93,8 +93,8 @@ if [ $# -ge 1 ]; then
     for size in "$@"; do
         ls __${size}.img 2> /dev/null # file should not exist
     done
-    echo "Step 14: Decrypting with wipe: " ./TrezorSymmetricFileEncryption.py -t  -d -w -p ${passphrase} "${obfuscatedfilearray[@]}"
-    ./TrezorSymmetricFileEncryption.py -t  -d -w -p ${passphrase} "${obfuscatedfilearray[@]}" &> /dev/null
+    echo "Step 14: Decrypting with safety check and wipe: " ./TrezorSymmetricFileEncryption.py -t  -d -w -p ${passphrase} "${obfuscatedfilearray[@]}"
+    ./TrezorSymmetricFileEncryption.py -t  -d -s -w -p ${passphrase} "${obfuscatedfilearray[@]}" &> /dev/null
     for size in "$@"; do
         diff __${size}.img __${size}.img.org
     done
