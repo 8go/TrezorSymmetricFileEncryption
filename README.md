@@ -1,4 +1,4 @@
-# ![Trezor icon](https://github.com/8go/TrezorSymmetricFileEncryption/blob/master/icons/TrezorSymmetricFileEncryption.png)
+# ![Trezor icon](icons/TrezorSymmetricFileEncryption.png)
 
 # Trezor Symmetric File Encryption
 
@@ -74,7 +74,7 @@ Run:
 Run-time command line options are
 
 ```
-TrezorSymmetricFileEncryption.py [-v] [-h] [-l <level>] [-t] [-2] [-s] [-w] [-o | -e | -d | -m | -n] [-p <passphrase>] <files>
+TrezorSymmetricFileEncryption.py [-v] [-h] [-l <level>] [-t] [-e | -o | -d | -m | -n] [-2] [-s] [-w] [-p <passphrase>] [-r] [-R] <files>
     -v, --verion
             print the version number
     -h, --help
@@ -84,6 +84,13 @@ TrezorSymmetricFileEncryption.py [-v] [-h] [-l <level>] [-t] [-2] [-s] [-w] [-o 
     -t, --terminal
             run in the terminal, except for a possible PIN query
             and a Passphrase query this avoids the GUI
+    -e, --encrypt
+            encrypt file and keep output filename as plaintext
+            (appends .tsfe suffix to input file)
+    -o, --obfuscatedencrypt
+            encrypt file and obfuscate output file name
+    -d, --decrypt
+            decrypt file
     -m, --encnameonly
             just encrypt the plaintext filename, show what the obfuscated
             filename would be; does not encrypt the file itself;
@@ -92,13 +99,6 @@ TrezorSymmetricFileEncryption.py [-v] [-h] [-l <level>] [-t] [-2] [-s] [-w] [-o 
             just decrypt the obfuscated filename;
             does not decrypt the file itself;
             incompaible with `-o`, `-e`, and `-m`
-    -d, --decrypt
-            decrypt file
-    -e, --encrypt
-            encrypt file and keep output filename as plaintext
-            (appends .tsfe suffix to input file)
-    -o, --obfuscatedencrypt
-            encrypt file and obfuscate output file name
     -2, --twice
             paranoid mode; encrypt file a second time on the Trezor chip itself;
             only relevant for `-e` and `-o`; ignored in all other cases.
@@ -107,6 +107,14 @@ TrezorSymmetricFileEncryption.py [-v] [-h] [-l <level>] [-t] [-2] [-s] [-w] [-o 
             master passphrase used for Trezor.
             It is recommended that you do not use this command line option
             but rather give the passphrase through a small window interaction.
+    -r, --readpinfromstdin
+            read the PIN, if needed, from the standard input, i.e. terminal,
+            when in terminal mode `-t`. By default, even with `-t` set
+            it is read via a GUI window.
+    -R, --readpassphrasefromstdin
+            read the passphrase, when needed, from the standard input,
+            when in terminal mode `-t`. By default, even with `-t` set
+            it is read via a GUI window.
     -s, --safety
             doublechecks the encryption process by decrypting the just
             encrypted file immediately and comparing it to original file;

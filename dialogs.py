@@ -13,7 +13,7 @@ from ui_enter_pin_dialog import Ui_EnterPinDialog
 from ui_trezor_chooser_dialog import Ui_TrezorChooserDialog
 
 from encoding import q2s, s2q
-from processing import processAllFromApply, reportLogging
+from processing import processAll, reportLogging
 
 import basics
 
@@ -398,7 +398,7 @@ class Dialog(QtGui.QDialog, Ui_Dialog):
 #	def handleButtonClick(self, button):
 #		sb = self.buttonBox.standardButton(button)
 #		if sb == QtGui.QDialogButtonBox.Apply:
-#			processAllFromApply(self, self.trezor, self.settings, self.fileMap, self.logger) #
+#			processAll(self.trezor, self.settings, self.fileMap, self.logger, self) #
 #		# elif sb == QtGui.QDialogButtonBox.Reset:
 #		#	reportLogging("Reset Clicked, quitting now...", logging.DEBUG,
 #		#		"UI", self.settings, self.logger, self)
@@ -410,12 +410,7 @@ class Dialog(QtGui.QDialog, Ui_Dialog):
 		if self.validate():
 			reportLogging("Apply was called by user request. Start processing now.",
 				logging.DEBUG, "GUI IO", self.settings, self.logger, self)
-			processAllFromApply(self, self.trezor, self.settings, self.fileMap, self.logger) #
-			# move the cursor to the end of the text, scroll to the bottom
-			cursor = self.textBrowser.textCursor()
-			cursor.setPosition(len(self.textBrowser.toPlainText()))
-			self.textBrowser.ensureCursorVisible()
-			self.textBrowser.setTextCursor(cursor)
+			processAll(self.trezor, self.settings, self.fileMap, self.logger, self) #
 		else:
 			reportLogging("Apply was called by user request. Apply is denied. "
 				"User input is not valid for processing. Did you select a file?",

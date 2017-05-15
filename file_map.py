@@ -44,7 +44,7 @@ class FileMap(object):
 
 	def __init__(self, trezor, logger):
 		assert trezor is not None
-		self.blob = {}
+		self.blob = None
 		self.trezor = trezor
 		self.outerKey = None # outer AES-CBC key, 1st-level encryption
 		self.outerIv = None  # IV for data blob encrypted with outerKey
@@ -76,17 +76,20 @@ class FileMap(object):
 				#os.chmod(fname, stat.S_IRUSR | stat.S_IWUSR )
 				self.logger.error("File %s cannot be written. "
 					"No write permissions. Skipping it.", fname)
-				return
+				raise IOError("File IO error: File %s cannot be written. "
+					"No write permissions. Skipping it. "
+					"Change file permissions and try again." % (fname))
 
 		self.loadBlobFromEncFile(originalFilename)
 		with open(fname, 'w+b') as f:
 			s = len(self.blob)
 			f.write(self.blob)
 			if f.tell() != s:
-				raise IOError("File IO problem - not enough data written")
+				self.logger.error("File IO problem: not enough data written "
+					"(file=%s, target=%d, done=%d)" % (fname, s, f.tell()))
+				raise IOError("File IO problem - not enough data written "
+					"(file=%s, target=%d, done=%d)" % (fname, s, f.tell()))
 			self.logger.debug("Decryption wrote %d bytes to file %s.",s,fname)
-			f.flush()
-			f.close()
 		# overwrite with nonsense to shred memory
 		rng = Random.new()
 		self.outerKey = rng.read(KEYSIZE)
@@ -94,14 +97,15 @@ class FileMap(object):
 
 	def loadBlobFromEncFile(self, fname):
 		"""
-		Load/read data from encrypted file, decrypt data amd store data in blob
+		Load/read data from encrypted file,
+		decrypt data amd store data in blob
 		Requires Trezor connected.
 
 		@param fname: name of the encrypted file to decrypt
 
 		@throws IOError: if reading file failed
 		"""
-		with file(fname) as f:
+		with open(fname, 'rb') as f:
 			header = f.read(len(Magic.headerStr))
 			if header != Magic.headerStr:
 				raise IOError("Bad header in storage file")
@@ -161,7 +165,8 @@ class FileMap(object):
 			for (ch1, ch2) in zip(hmacDigest, newHmacDigest):
 				hmacCompare |= int(ch1 != ch2)
 			if hmacCompare != 0:
-				raise IOError("Corrupted disk format - HMAC does not match or bad passphrase")
+				raise IOError("Corrupted disk format - HMAC does not match "
+					"or bad passphrase. Try again with the correct passphrase.")
 
 			if self.noOfEncryptions == 2:
 				encrypted = self.decryptOnTrezorDevice(encrypted, Magic.levelTwoKey)
@@ -177,11 +182,12 @@ class FileMap(object):
 
 		with open(fname, 'rb') as f:
 			# Size 0 will read the ENTIRE file into memory!
-			m = mmap.mmap(f.fileno(), 0, prot=mmap.PROT_READ) #File is open read-only
+			# File is open read-only
+			# mmap does not implement __exit__ so we cannot use "with mmap... as m:"
+			m = mmap.mmap(f.fileno(), 0, prot=mmap.PROT_READ)
 			s = m.size()
 			self.blob = m.read(s)
-			m.close()
-			f.close()
+			del m
 		if len(self.blob) != s:
 			raise IOError("File IO problem - not enough data read")
 		self.logger.debug("Read %d bytes from file %s.",s,fname)
@@ -228,7 +234,7 @@ class FileMap(object):
 				#raise IOError("File " + fname + " cannot be written. "
 				#	"No write permissions. Skipping it.")
 
-		with file(fname, "wb") as f:
+		with open(fname, "wb") as f:
 			version = basics.TSFEFILEFORMATVERSION
 			futureUse = ""
 			f.write(Magic.headerStr)
@@ -256,8 +262,6 @@ class FileMap(object):
 			f.write(encrypted)
 			f.write(hmacDigest)
 			ww = f.tell()
-			f.flush()
-			f.close()
 			self.logger.debug("Wrote %d bytes to file %s.", ww, fname)
 			return fname
 
@@ -267,8 +271,8 @@ class FileMap(object):
 			--> homegrown padding == obfuscated filename
 		"""
 		pad16 = Padding(BLOCKSIZE).pad(plaintextFileName)
-		self.logger.debug("Press confirm on Trezor device to encrypt file "
-			"name %s (if necessary).", plaintextFileName)
+		# self.logger.debug("Press confirm on Trezor device to encrypt file "
+		#	"name %s (if necessary).", plaintextFileName)
 		# we do not use an IV here so that we can quickly deobfuscate
 		# filenames without having to read the file
 		encFn = self.trezor.encrypt_keyvalue(Magic.fileNameNode,
@@ -321,6 +325,7 @@ class FileMap(object):
 		"""
 		Pad plaintext with PKCS#5 and encrypt it.
 		"""
+		self.logger.debug("AES CBC encryption with key of size %d bits." % (len(key)*8))
 		cipher = AES.new(key, AES.MODE_CBC, iv)
 		padded = Padding(BLOCKSIZE).pad(plaintext)
 		return cipher.encrypt(padded)
@@ -335,6 +340,7 @@ class FileMap(object):
 		"""
 		Decrypt ciphertext, unpad it and return
 		"""
+		self.logger.debug("AES CBC decryption with key of size %d bits." % (len(key)*8))
 		cipher = AES.new(key, AES.MODE_CBC, iv)
 		plaintext = cipher.decrypt(ciphertext)
 		unpadded = Padding(BLOCKSIZE).unpad(plaintext)

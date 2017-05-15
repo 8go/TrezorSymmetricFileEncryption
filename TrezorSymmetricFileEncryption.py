@@ -3,7 +3,8 @@
 '''
 Use TREZOR as a hardware device for symmetric file encryption
 
-Usage: python TrezorSymmetricFileEncryption.py [-v] [-h] [-o | -e | -d] <files>
+Usage: python TrezorSymmetricFileEncryption.py
+Usage: python TrezorSymmetricFileEncryption.py --help
 
 Source and readme is on www.github.com, search for TrezorSymmetricFileEncryption
 
@@ -11,6 +12,7 @@ Source and readme is on www.github.com, search for TrezorSymmetricFileEncryption
 
 import sys
 import logging
+import getpass
 
 from PyQt4 import QtGui, QtCore
 from PyQt4.QtCore import QTimer
@@ -33,42 +35,90 @@ import processing
 
 class QtTrezorMixin(object):
 	"""
-	Mixin for input of passhprases.
+	Mixin for input of Trezor PIN and passhprases.
+	Works via both, terminal as well as PyQt GUI
 	"""
 
 	def __init__(self, *args, **kwargs):
 		super(QtTrezorMixin, self).__init__(*args, **kwargs)
 		self.passphrase = None
+		self.readpinfromstdin = None
+		self.readpassphrasefromstdin = None
 
 	def callback_ButtonRequest(self, msg):
 		return proto.ButtonAck()
 
 	def callback_PassphraseRequest(self, msg):
 		if self.passphrase is not None:
-			return proto.PassphraseAck(passphrase=self.passphrase)
+			return proto.PassphraseAck(passphrase=unicode(self.passphrase))
 
-		dialog = TrezorPassphraseDialog()
-		if not dialog.exec_():
-			sys.exit(3)
+		if self.readpassphrasefromstdin:
+			# read passphrase from stdin
+			try:
+				passphrase = getpass.getpass("Please enter passphrase: ")
+				passphrase = unicode(passphrase)
+			except KeyboardInterrupt:
+				sys.stderr.write("\nKeyboard interrupt: passphrase not read. Aborting.\n")
+				sys.exit(3)
+			except Exception, e:
+				sys.stderr.write("Critical error: Passphrase not read. Aborting. (%s)" % e)
+				sys.exit(3)
 		else:
-			passphrase = dialog.passphraseEdit.text()
-			passphrase = unicode(passphrase)
+			dialog = TrezorPassphraseDialog()
+			if not dialog.exec_():
+				sys.exit(3)
+			else:
+				passphrase = dialog.passphraseEdit.text()
+				passphrase = unicode(passphrase)
 
 		return proto.PassphraseAck(passphrase=passphrase)
 
 	def callback_PinMatrixRequest(self, msg):
-		dialog = EnterPinDialog()
-		if not dialog.exec_():
-			sys.exit(7)
+		if self.readpinfromstdin:
+			# read PIN from stdin
+			print "                  7  8  9"
+			print "                  4  5  6"
+			print "                  1  2  3"
+			try:
+				pin = getpass.getpass("Please enter PIN: ")
+			except KeyboardInterrupt:
+				sys.stderr.write("\nKeyboard interrupt: PIN not read. Aborting.\n")
+				sys.exit(7)
+			except Exception, e:
+				sys.stderr.write("Critical error: PIN not read. Aborting. (%s)" % e)
+				sys.exit(7)
+		else:
+			dialog = EnterPinDialog()
+			if not dialog.exec_():
+				sys.exit(7)
+			pin = q2s(dialog.pin())
 
-		pin = q2s(dialog.pin())
 		return proto.PinMatrixAck(pin=pin)
 
 	def prefillPassphrase(self, passphrase):
 		"""
 		Instead of asking for passphrase, use this one
 		"""
-		self.passphrase = passphrase.decode("utf-8")
+		if passphrase is not None:
+			self.passphrase = passphrase.decode("utf-8")
+		else:
+			self.passphrase = None
+
+	def prefillReadpinfromstdin(self, readpinfromstdin=False):
+		"""
+		Specify if PIN should be read from stdin instead of from GUI
+		@param readpinfromstdin: True to force it to read from stdin, False otherwise
+		@type readpinfromstdin: C{bool}
+		"""
+		self.readpinfromstdin = readpinfromstdin
+
+	def prefillReadpassphrasefromstdin(self, readpassphrasefromstdin=False):
+		"""
+		Specify if passphrase should be read from stdin instead of from GUI
+		@param readpassphrasefromstdin: True to force it to read from stdin, False otherwise
+		@type readpassphrasefromstdin: C{bool}
+		"""
+		self.readpassphrasefromstdin = readpassphrasefromstdin
 
 class QtTrezorClient(ProtocolMixin, QtTrezorMixin, BaseClient):
 	"""
@@ -196,6 +246,9 @@ if trezor is None:
 	sys.exit(1)
 
 trezor.clear_session()
+trezor.prefillReadpinfromstdin(settings.RArg)
+trezor.prefillReadpassphrasefromstdin(settings.AArg)
+trezor.prefillPassphrase(settings.PArg)
 
 fileMap = file_map.FileMap(trezor,logger)
 
@@ -216,8 +269,6 @@ else:
 			"the encrypted files will be shredded after decryption. "
 			"Abort if you are uncertain or don't understand.", logging.WARNING,
 			"Dangerous arguments", settings, logger, None)
-	if settings.PArg is not None:
-		trezor.prefillPassphrase(settings.PArg)
 
 	processing.processAll(trezor, settings, fileMap, logger, dialog=None)
 	sys.exit(0)

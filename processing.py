@@ -37,6 +37,8 @@ class Settings(object):
 		self.NArg = False
 		self.XArg = False # -2, --twice
 		self.PArg = None
+		self.RArg = None # -r read PIN
+		self.AArg = None # -R read passphrase
 		self.SArg = False # Safety check
 		self.WArg = False # Wipe plaintxt after encryption
 		self.inputFiles = [] # list of input filenames
@@ -51,13 +53,14 @@ class Settings(object):
 		self.logger.debug("self.MArg = %s", self.MArg)
 		self.logger.debug("self.NArg = %s", self.NArg)
 		self.logger.debug("self.XArg = %s", self.XArg)
-		self.logger.debug("self.PArg = %s", self.PArg)
+		self.logger.debug("self.PArg = %s", "***") # do not log passphrase
+		self.logger.debug("self.RArg = %s", self.RArg)
+		self.logger.debug("self.AArg = %s", self.AArg)
 		self.logger.debug("self.SArg = %s", self.SArg)
 		self.logger.debug("self.WArg = %s", self.WArg)
 		self.logger.debug("self.inputFiles = %s", str(self.inputFiles))
 
 	def gui2Settings(self, dialog, trezor):
-		trezor.prefillPassphrase(q2s(dialog.pw1()))
 		self.DArg = dialog.dec()
 		self.NArg = dialog.decFn()
 		self.EArg = dialog.enc()
@@ -67,8 +70,21 @@ class Settings(object):
 		self.SArg = dialog.encSafe()
 		self.WArg = dialog.encWipe() or dialog.decWipe()
 		self.PArg = q2s(dialog.pw1())
+		self.RArg = False
+		self.AArg = False
 		if self.PArg is None:
 			self.PArg = ""
+		# if passphrase has changed we must clear the session,
+		# otherwise Trezor will used cached passphrase, i.e.
+		# Trezor will not issue callback to ask for passphrase
+		if (trezor.passphrase is None) or (trezor.passphrase != self.PArg.decode("utf-8")):
+			reportLogging("Passphrase has changed. If PIN is set it will "
+				"have to be entered again.", logging.INFO,
+				"Trezor IO", self, self.logger, dialog)
+			trezor.clear_session()
+			trezor.prefillPassphrase(self.PArg)
+			trezor.prefillReadpinfromstdin(False)
+			trezor.prefillReadpassphrasefromstdin(False)
 		self.inputFiles = dialog.selectedFiles()
 		self.printSettings()
 
@@ -88,30 +104,53 @@ class Settings(object):
 		dialog.setEncWipe(self.WArg and self.EArg)
 		dialog.setPw1(self.PArg)
 		dialog.setPw2(self.PArg)
+		if self.RArg:
+			self.RArg = False
+			reportLogging("In GUI mode `-r` option will be ignored.",
+				logging.INFO,
+				"Arguments", self, self.logger, dialog)
+		if self.AArg:
+			self.AArg = False
+			reportLogging("In GUI mode `-R` option will be ignored.",
+				logging.INFO,
+				"Arguments", self, self.logger, dialog)
+		trezor.prefillReadpinfromstdin(False)
+		trezor.prefillReadpassphrasefromstdin(False)
 		self.printSettings()
-
 
 def shred(filename, passes, settings = None, logger = None, dialog = None):
 	"""
+	Shred the file named `filename` `passes` times.
 	There is no guarantee that the file will actually be shredded.
 	The OS or the smart disk might buffer it in a cache and
 	data might remain on the physical disk.
 	This is a best effort.
+
+	@param filename: the name of the file to shred
+	@type filename: C{string}
+	@param passes: how often the file should be overwritten
+	@type passes: C{int}
+	@param settings: holds settings for how to log info/warnings/errors
+	@type settings: L{Settings}
+	@param logger: holds logger for where to log info/warnings/errors
+	@type logger: L{logging.Logger}
+	@param dialog: holds GUI window for where to log info/warnings/errors
+	@type dialog: L{dialogs.Dialog}
+	@return: True if successful, otherwise False
+	@rtype: C{bool}
 	"""
 	try:
 		if not os.path.isfile(filename):
 			raise IOError("Cannot shred, \"%s\" is not a file." % filename)
 
 		ld = os.path.getsize(filename)
-		fh = open(filename,  "w")
-		for _ in range(int(passes)):
-			data = "0" * ld
-			fh.write(data)
-			fh.seek(0,  0)
-		fh.close()
-		fh = open(filename,  "w")
-		fh.truncate(0)
-		fh.close()
+		with open(filename, "w") as fh:
+			for _ in range(int(passes)):
+				data = "0" * ld
+				fh.write(data)
+				fh.seek(0,  0)
+		with open(filename, "w") as fh:
+			fh.truncate(0)
 		urandom_entropy = os.urandom(64)
 		randomBin = hashlib.sha256(urandom_entropy).digest()
 		randomB64 = base64.urlsafe_b64encode(randomBin).replace("=", "-")
@@ -142,7 +181,7 @@ def shred(filename, passes, settings = None, logger = None, dialog = None):
 	return True
 
 def usage():
-	print """TrezorSymmetricFileEncryption.py [-v] [-h] [-l <level>] [-t] [-2] [-s] [-w] [-o | -e | -d | -m | -n] [-p <passphrase>] <files>
+	print """TrezorSymmetricFileEncryption.py [-v] [-h] [-l <level>] [-t] [-e | -o | -d | -m | -n] [-2] [-s] [-w] [-p <passphrase>] [-r] [-R] <files>
 		-v, --verion
 				print the version number
 		-h, --help
@@ -152,6 +191,13 @@ def usage():
 		-t, --terminal
 				run in the terminal, except for a possible PIN query
 				and a Passphrase query this avoids the GUI
+		-e, --encrypt
+				encrypt file and keep output filename as plaintext
+				(appends .tsfe suffix to input file)
+		-o, --obfuscatedencrypt
+				encrypt file and obfuscate output file name
+		-d, --decrypt
+				decrypt file
 		-m, --encnameonly
 				just encrypt the plaintext filename, show what the obfuscated
 				filename would be; does not encrypt the file itself;
@@ -160,13 +206,6 @@ def usage():
 				just decrypt the obfuscated filename;
 				does not decrypt the file itself;
 				incompaible with `-o`, `-e`, and `-m`
-		-d, --decrypt
-				decrypt file
-		-e, --encrypt
-				encrypt file and keep output filename as plaintext
-				(appends .tsfe suffix to input file)
-		-o, --obfuscatedencrypt
-				encrypt file and obfuscate output file name
 		-2, --twice
 				paranoid mode; encrypt file a second time on the Trezor chip itself;
 				only relevant for `-e` and `-o`; ignored in all other cases.
@@ -175,6 +214,14 @@ def usage():
 				master passphrase used for Trezor.
 				It is recommended that you do not use this command line option
 				but rather give the passphrase through a small window interaction.
+		-r, --readpinfromstdin
+				read the PIN, if needed, from the standard input, i.e. terminal,
+				when in terminal mode `-t`. By default, even with `-t` set
+				it is read via a GUI window.
+		-R, --readpassphrasefromstdin
+				read the passphrase, when needed, from the standard input,
+				when in terminal mode `-t`. By default, even with `-t` set
+				it is read via a GUI window.
 		-s, --safety
 				doublechecks the encryption process by decrypting the just
 				encrypted file immediately and comparing it to original file;
@@ -264,12 +311,23 @@ def printVersion():
 	print "Version: " + basics.TSFEVERSION
 
 def parseArgs(argv, settings, logger):
+	"""
+	Parse the command line arguments and store the results in `setings`.
+	Report errors to `logger`.
+
+	@param settings: place to store settings
+	@type settings: L{Settings}
+	@param logger: holds logger for where to log info/warnings/errors
+	@type logger: L{logging.Logger}
+	"""
 	try:
-		opts, args = getopt.getopt(argv,"vhl:tmn2swdeop:",
+		opts, args = getopt.getopt(argv,"vhl:tmn2swdeop:rR",
 			["version","help","logging=","terminal","encnameonly","decnameonly",
-			"twice","safety","decrypt","encrypt","obfuscatedencrypt","passphrase="])
+			"twice","safety","decrypt","encrypt","obfuscatedencrypt",
+			"passphrase=","readpinfromstdin", "readpassphrasefromstdin"])
 	except getopt.GetoptError, e:
-		msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Critical, "Wrong arguments", "Error: " + str(e))
+		msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Critical, "Wrong arguments",
+			"Error: %s" % str(e))
 		msgBox.exec_()
 		logger.critical('Wrong arguments. Error: %s.', str(e))
 		sys.exit(2)
@@ -304,6 +362,10 @@ def parseArgs(argv, settings, logger):
 			settings.WArg = True
 		elif opt in ("-p", "--passphrase"):
 			settings.PArg = arg
+		elif opt in ("-r", "--readpinfromstdin"):
+			settings.RArg = True
+		elif opt in ("-R", "--readpassphrasefromstdin"):
+			settings.AArg = True
 
 	if loglevelused:
 		try:
@@ -340,8 +402,8 @@ def parseArgs(argv, settings, logger):
 			"-n when using -e, -o, or -m (and vice versa).", logging.CRITICAL,
 			"Wrong arguments", settings, logger)
 		sys.exit(2)
-	if settings.DArg or settings.NArg or settings.MArg:
-		settings.XArg = False # X is relevant only when -e or -o is set
+	# if settings.DArg or settings.NArg or settings.MArg:
+	#	settings.XArg = False # X is relevant only when -e or -o is set
 	if settings.OArg:
 		settings.EArg = True # treat O like an extra flag, used in addition
 	if settings.MArg:
@@ -349,19 +411,52 @@ def parseArgs(argv, settings, logger):
 		settings.OArg = False
 	if settings.NArg:
 		settings.DArg = False
+	if (settings.MArg and settings.DArg):
+		reportLogging("You cannot specify -d and -m at the same time.", logging.CRITICAL,
+			"Wrong arguments", settings, logger)
+		sys.exit(2)
+	if (settings.NArg and settings.EArg) or (settings.NArg and settings.OArg):
+		reportLogging("You cannot specify -e or -o at the same time as -n.", logging.CRITICAL,
+			"Wrong arguments", settings, logger)
+		sys.exit(2)
+	if (settings.MArg and settings.OArg) or (settings.MArg and settings.XArg) or \
+		(settings.MArg and settings.SArg) or (settings.MArg and settings.WArg):
+		reportLogging("You cannot specify -o, -2, -s or -w with -m", logging.CRITICAL,
+			"Wrong arguments", settings, logger)
+		sys.exit(2)
+	if (settings.NArg and settings.OArg) or (settings.NArg and settings.XArg) or \
+		(settings.NArg and settings.SArg) or (settings.NArg and settings.WArg):
+		reportLogging("You cannot specify -o, -2, -s or -w with -n", logging.CRITICAL,
+			"Wrong arguments", settings, logger)
+		sys.exit(2)
+	if (settings.DArg and settings.OArg) or (settings.DArg and settings.XArg) or \
+		(settings.DArg and settings.SArg):
+		reportLogging("You cannot specify -o, -2, or -s with -d", logging.CRITICAL,
+			"Wrong arguments", settings, logger)
+		sys.exit(2)
 	settings.inputFiles = args
 	settings.printSettings()
 
 def reportLogging(str, level, title, settings, logger, dialog=None):
 	"""
-	Displays string str depending on scenario:
+	Displays string `str` depending on scenario:
 	a) in terminal mode: thru logger (except if loglevel == NOTSET)
 	b) in GUI mode and GUI window open: (dialog!=None) in Status textarea of GUI window
-	c) in GUI mode but window still/already closed: (dialog=None) thru QMessageBox()
+	c) in GUI mode but window still/already closed: (dialog==None) thru QMessageBox()
 
 	@param str: string to report/log
-	@param level: log level from DEBUG to CRITICAL
+	@type str: C{string}
+	@param level: log level from DEBUG to CRITICAL from L{logging}
+	@type level: C{int}
 	@param title: window title text
+	@type title: C{string}
+
+	@param settings: holds settings for how to log info/warnings/errors
+	@type settings: L{Settings}
+	@param logger: holds logger for where to log info/warnings/errors
+	@type logger: L{logging.Logger}
+	@param dialog: holds GUI window for where to log info/warnings/errors
+	@type dialog: L{dialogs.Dialog}
 	"""
 	if dialog is None:
 		guiExists = False
@@ -467,7 +562,14 @@ def analyzeFilename(inputFile, settings, logger, dialog):
 		contain special chars except - and _, end in A..Q)
 	Else return "d" (no ., length is mod 16, no special chars, end in A..P)
 
-	@param inputFile: filename
+	@param inputFile: filename to analyze
+	@type inputFile: C{string}
+	@param settings: holds settings for how to log info/warnings/errors
+	@type settings: L{Settings}
+	@param logger: holds logger for where to log info/warnings/errors
+	@type logger: L{logging.Logger}
+	@param dialog: holds GUI window for where to log info/warnings/errors
+	@type dialog: L{dialogs.Dialog}
 	"""
 	reportLogging("Analyzing filename %s" % inputFile, logging.DEBUG,
 		"Debug", settings, logger, dialog)
@@ -490,7 +592,14 @@ def decryptFileNameOnly(inputFile, settings, fileMap, logger, dialog):
 	If it ends with .tsfe then the filename is plain text
 	Otherwise the filename is obfuscated.
 
-	@param inputFile: filename
+	@param inputFile: filename to decrypt
+	@type inputFile: C{string}
+	@param settings: holds settings for how to log info/warnings/errors
+	@type settings: L{Settings}
+	@param logger: holds logger for where to log info/warnings/errors
+	@type logger: L{logging.Logger}
+	@param dialog: holds GUI window for where to log info/warnings/errors
+	@type dialog: L{dialogs.Dialog}
 	"""
 	reportLogging("Decrypting filename %s" % inputFile, logging.DEBUG,
 		"Debug", settings, logger, dialog)
@@ -529,7 +638,14 @@ def decryptFile(inputFile, settings, fileMap, logger, dialog):
 	If it ends with .tsfe then the filename is plain text
 	Otherwise the filename is obfuscated.
 
-	@param inputFile: filename of encrypted file
+	@param inputFile: name of file to decrypt
+	@type inputFile: C{string}
+	@param settings: holds settings for how to log info/warnings/errors
+	@type settings: L{Settings}
+	@param logger: holds logger for where to log info/warnings/errors
+	@type logger: L{logging.Logger}
+	@param dialog: holds GUI window for where to log info/warnings/errors
+	@type dialog: L{dialogs.Dialog}
 	"""
 	reportLogging("Decrypting file %s" % inputFile, logging.DEBUG,
 		"Debug", settings, logger, dialog)
@@ -584,6 +700,15 @@ def encryptFileNameOnly(inputFile, settings, fileMap, logger, dialog):
 	"""
 	Encrypt a filename.
 	Show only what the obfuscated filename would be, without encrypting the file
+
+	@param inputFile: filename to encrypt
+	@type inputFile: C{string}
+	@param settings: holds settings for how to log info/warnings/errors
+	@type settings: L{Settings}
+	@param logger: holds logger for where to log info/warnings/errors
+	@type logger: L{logging.Logger}
+	@param dialog: holds GUI window for where to log info/warnings/errors
+	@type dialog: L{dialogs.Dialog}
 	"""
 	reportLogging("Encrypting filename %s" % inputFile, logging.DEBUG,
 		"Debug", settings, logger, dialog)
@@ -614,10 +739,19 @@ def encryptFile(inputFile, settings, fileMap, obfuscate, twice, logger, dialog):
 	Encrypt a file.
 	if obfuscate == false then keep the output filename in plain text and add .tsfe
 
-	@param inputFile: filename
-	@param fileMap
+	@param inputFile: name of file to encrypt
+	@type inputFile: C{string}
+	@param settings: holds settings for how to log info/warnings/errors
+	@type settings: L{Settings}
+	@param fileMap: object to use to handle file format of encrypted file
+	@type fileMap: L{file_map.FileMap}
 	@param obfuscate: bool to indicate if an obfuscated filename (True) is
 		desired or a plaintext filename (False)
+	@type obfuscate: C{bool}
+	@param logger: holds logger for where to log info/warnings/errors
+	@type logger: L{logging.Logger}
+	@param dialog: holds GUI window for where to log info/warnings/errors
+	@type dialog: L{dialogs.Dialog}
 	"""
 	reportLogging("Encrypting file %s" % inputFile, logging.DEBUG,
 		"Debug", settings, logger, dialog)
@@ -692,7 +826,20 @@ def	safetyCheck(plaintextFname, encryptedFname, fileMap, settings, logger, dialo
 	removing decrypted file decryptedFname
 	renaming original file plaintextFname.<random number>.org back to input plaintextFname
 
-	@returns True if safety check passes successfuly
+	@param plaintextFname: name of existing plaintext file whose previous encryption needs to be double-checked
+	@type plaintextFname: C{string}
+	@param encryptedFname: name of existing encrypted file (i.e. the plaintext file encrypted)
+	@type encryptedFname: C{string}
+	@param settings: holds settings for how to log info/warnings/errors
+	@type settings: L{Settings}
+	@param fileMap: object to use to handle file format of encrypted file
+	@type fileMap: L{file_map.FileMap}
+	@param logger: holds logger for where to log info/warnings/errors
+	@type logger: L{logging.Logger}
+	@param dialog: holds GUI window for where to log info/warnings/errors
+	@type dialog: L{dialogs.Dialog}
+	@returns: True if safety check passes successfuly, False otherwise
+	@rtype: C{bool}
 	"""
 	urandom_entropy = os.urandom(64)
 	randomBin = hashlib.sha256(urandom_entropy).digest()
@@ -722,8 +869,19 @@ def	safetyCheck(plaintextFname, encryptedFname, fileMap, settings, logger, dialo
 def convertFile(inputFile, settings, fileMap, logger, dialog):
 	"""
 	Encrypt or decrypt one file.
+	Which operation will be performed is derived from `settings`
+	or from analyzing the filename `inputFile`
 
-	@param inputFile: filename
+	@param inputFile: name of the file to be either encrypted or decrypted
+	@type inputFile: C{string}
+	@param settings: holds settings for how to log info/warnings/errors
+	@type settings: L{Settings}
+	@param fileMap: object to use to handle file format of encrypted file
+	@type fileMap: L{file_map.FileMap}
+	@param logger: holds logger for where to log info/warnings/errors
+	@type logger: L{logging.Logger}
+	@param dialog: holds GUI window for where to log info/warnings/errors
+	@type dialog: L{dialogs.Dialog}
 	"""
 	if settings.DArg:
 		# decrypt by choice
@@ -753,7 +911,21 @@ def convertFile(inputFile, settings, fileMap, logger, dialog):
 			encryptFile(inputFile, settings, fileMap, False, settings.XArg, logger, dialog)
 			settings.EArg = False
 
-def doWork(trezor, settings, fileMap, logger, dialog):
+def doWork(settings, fileMap, logger, dialog):
+	"""
+	Loop through the list of filenames in `settings`
+	and process each one.
+
+	@param settings: holds settings for how to log info/warnings/errors
+	@type settings: L{Settings}
+	@param fileMap: object to use to handle file format of encrypted file
+	@type fileMap: L{file_map.FileMap}
+	@param logger: holds logger for where to log info/warnings/errors
+	@type logger: L{logging.Logger}
+	@param dialog: holds GUI window for where to log info/warnings/errors
+	@type dialog: L{dialogs.Dialog}
+	"""
+
 	reportLogging("Time entering doWork(): %s" % datetime.datetime.now(),
 		logging.DEBUG, "Debug", settings, logger, dialog)
 	for inputFile in settings.inputFiles:
@@ -762,30 +934,53 @@ def doWork(trezor, settings, fileMap, logger, dialog):
 				logging.DEBUG, "Debug", settings, logger, dialog)
 			convertFile(inputFile, settings, fileMap, logger, dialog)
 		except PinException:
-			msgBox = QtGui.QMessageBox(text="Invalid PIN")
-			msgBox.exec_()
+			reportLogging("Trezor reports invalid PIN. Aborting.",
+				logging.CRITICAL,
+				"Trezor IO", settings, logger, dialog)
 			sys.exit(8)
 		except CallException:
 			#button cancel on Trezor, so exit
+			reportLogging("Trezor reports that user clicked 'Cancel' on Trezor device. "
+				"Aborting.",
+				logging.CRITICAL,
+				"Trezor IO", settings, logger, dialog)
 			sys.exit(6)
 		except IOError, e:
 			reportLogging("IO error: %s" % e, logging.CRITICAL,
 				"Critical Exception", settings, logger, dialog)
-			traceback.print_exc() # prints to stderr
+			if logger.getEffectiveLevel() == logging.DEBUG:
+				traceback.print_exc() # prints to stderr
 		except Exception, e:
 			reportLogging("Critical error: %s" % e, logging.CRITICAL,
 				"Critical Exception", settings, logger, dialog)
-			traceback.print_exc() # prints to stderr
+			if logger.getEffectiveLevel() == logging.DEBUG:
+				traceback.print_exc() # prints to stderr
 	reportLogging("Time leaving doWork(): %s" % datetime.datetime.now(),
 		logging.DEBUG, "Debug", settings, logger, dialog)
 
-def processAllFromApply(dialog, trezor, settings, fileMap, logger):
-	settings.gui2Settings(dialog,trezor)
-	reportLogging("Apply button was clicked",
-		logging.DEBUG, "Debug", settings, logger, dialog)
-	processAll(trezor, settings, fileMap, logger, dialog)
-	reportLogging("Apply button was processed, returning to GUI",
-		logging.DEBUG, "Debug", settings, logger, dialog)
-
 def processAll(trezor, settings, fileMap, logger, dialog=None):
-	doWork(trezor, settings, fileMap, logger, dialog)
+	"""
+	If dialog is None then processAll() has been called
+	from Terminal and there is no GUI.
+	If dialog is not None processAll() has been called
+	from GUI and there is a window.
+
+	@param trezor: used for storage of user provided Trezor passphrase
+	@type trezor: L{QtTrezorClient}
+	@param settings: holds settings for how to log info/warnings/errors
+	@type settings: L{Settings}
+	@param fileMap: object to use to handle file format of encrypted file
+	@type fileMap: L{file_map.FileMap}
+	@param logger: holds logger for where to log info/warnings/errors
+	@type logger: L{logging.Logger}
+	@param dialog: holds GUI window for where to log info/warnings/errors
+	@type dialog: L{dialogs.Dialog}
+	"""
+	if dialog is not None:
+		reportLogging("Apply button was clicked",
+			logging.DEBUG, "Debug", settings, logger, dialog)
+		settings.gui2Settings(dialog,trezor)
+	doWork(settings, fileMap, logger, dialog)
+	if dialog is not None:
+		reportLogging("Apply button was processed, returning to GUI",
+			logging.DEBUG, "Debug", settings, logger, dialog)
