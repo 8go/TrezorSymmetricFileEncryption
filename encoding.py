@@ -6,27 +6,40 @@ import os
 import os.path
 import random
 
+
 def q2s(s):
 	"""Convert QString to UTF-8 string object"""
 	return str(s.toUtf8())
 
+
 def s2q(s):
 	"""Convert UTF-8 encoded string to QString"""
 	return QtCore.QString.fromUtf8(s)
+
+
+def u(fmt, s):
+	# 	u = lambda fmt, s: struct.unpack(fmt, s)[0]
+	return(struct.unpack(fmt, s)[0])
+
+
+def p(fmt, s):
+	# 	u = lambda fmt, s: struct.unpack(fmt, s)[0]
+	return(struct.pack(fmt, s))
+
 
 class Magic(object):
 	"""
 	Few magic constant definitions so that we know which nodes to search
 	for keys.
 	"""
-	u = lambda fmt, s: struct.unpack(fmt, s)[0]
+
 	headerStr = "TSFE"
 	hdr = u("!I", headerStr)
 
 	# first level encryption
 	# unlock key for first level AES encryption, key from Trezor, en/decryption on PC
 	levelOneNode = [hdr, u("!I", "DEC1")]
-	levelOneKey = "Decrypt file for first time?" # string to derive wrapping key from
+	levelOneKey = "Decrypt file for first time?"  # string to derive wrapping key from
 
 	# second level encryption
 	# second level AES encryption, de/encryption on trezor device
@@ -34,8 +47,9 @@ class Magic(object):
 	levelTwoKey = "Decrypt file for second time?"
 
 	# only used for filename encryption (no confirm button click desired)
-	fileNameNode = [hdr, u("!I", "FLNM")] # filename encryption for filename obfuscation
+	fileNameNode = [hdr, u("!I", "FLNM")]  # filename encryption for filename obfuscation
 	fileNameKey = "Decrypt filename only?"
+
 
 class Padding(object):
 	"""
@@ -51,6 +65,7 @@ class Padding(object):
 
 	def unpad(self, s):
 		return s[0:-ord(s[-1])]
+
 
 class PaddingHomegrown(object):
 	"""
@@ -92,7 +107,7 @@ class PaddingHomegrown(object):
 			# r = random.randint(0, 51) # old version
 			# New version
 			# deterministic mapping of plaintext filename to obfuscated file name
-			r = (((r+17)*15485863) % 52) # new version
+			r = (((r+17)*15485863) % 52)
 			if r < 26:
 				c = chr(r+ord('a'))
 			else:

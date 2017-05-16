@@ -14,24 +14,20 @@ import sys
 import logging
 import getpass
 
-from PyQt4 import QtGui, QtCore
-from PyQt4.QtCore import QTimer
-from PyQt4.QtGui import QPixmap
-from Crypto import Random
-from shutil import copyfile
+from PyQt4 import QtGui
 
-from trezorlib.client import BaseClient, ProtocolMixin, CallException, PinException
+from trezorlib.client import BaseClient, ProtocolMixin  # CallException, PinException
 from trezorlib.transport import ConnectionError
 from trezorlib.transport_hid import HidTransport
 from trezorlib import messages_pb2 as proto
 
 import file_map
-from encoding import q2s, s2q
 
 from dialogs import TrezorPassphraseDialog, Dialog, EnterPinDialog, TrezorChooserDialog
 
 import basics
 import processing
+
 
 class QtTrezorMixin(object):
 	"""
@@ -91,7 +87,7 @@ class QtTrezorMixin(object):
 			dialog = EnterPinDialog()
 			if not dialog.exec_():
 				sys.exit(7)
-			pin = q2s(dialog.pin())
+			pin = dialog.pin()
 
 		return proto.PinMatrixAck(pin=pin)
 
@@ -120,11 +116,13 @@ class QtTrezorMixin(object):
 		"""
 		self.readpassphrasefromstdin = readpassphrasefromstdin
 
+
 class QtTrezorClient(ProtocolMixin, QtTrezorMixin, BaseClient):
 	"""
 	Trezor client with Qt input methods
 	"""
 	pass
+
 
 class TrezorChooser(object):
 	"""Class for working with Trezor device via HID"""
@@ -172,8 +170,7 @@ class TrezorChooser(object):
 			except IOError:
 				raise RuntimeError("Trezor is currently in use")
 
-
-		#maps deviceId string to device label
+		# maps deviceId string to device label
 		deviceMap = {}
 		for device in devices:
 			try:
@@ -184,7 +181,7 @@ class TrezorChooser(object):
 
 				deviceMap[device[0]] = label
 			except IOError:
-				#device in use, do not offer as choice
+				# device in use, do not offer as choice
 				continue
 
 		if not deviceMap:
@@ -196,6 +193,7 @@ class TrezorChooser(object):
 
 		deviceStr = dialog.chosenDeviceStr()
 		return HidTransport([deviceStr, None])
+
 
 def showGui(trezor, settings, fileMap, logger):
 	"""
@@ -218,8 +216,9 @@ def showGui(trezor, settings, fileMap, logger):
 		processing.reportLogging("Shutting down due to user request "
 			"(Done/Quit was called).", logging.DEBUG,
 			"GUI IO", settings, logger, None)
-		sys.exit(4) # Esc or exception
-	settings.gui2Settings(dialog,trezor)
+		sys.exit(4)  # Esc or exception
+	settings.gui2Settings(dialog, trezor)
+
 
 # root
 
@@ -228,7 +227,7 @@ logger = logging.getLogger('tsfe')
 
 app = QtGui.QApplication(sys.argv)
 
-settings = processing.Settings(logger) # initialize settings
+settings = processing.Settings(logger)  # initialize settings
 # parse command line
 processing.parseArgs(sys.argv[1:], settings, logger)
 
@@ -250,7 +249,7 @@ trezor.prefillReadpinfromstdin(settings.RArg)
 trezor.prefillReadpassphrasefromstdin(settings.AArg)
 trezor.prefillPassphrase(settings.PArg)
 
-fileMap = file_map.FileMap(trezor,logger)
+fileMap = file_map.FileMap(trezor, logger)
 
 # if everything is specified in the command line then do not call the GUI
 if ((settings.PArg is None) or (len(settings.inputFiles) <= 0)) and (not settings.TArg):

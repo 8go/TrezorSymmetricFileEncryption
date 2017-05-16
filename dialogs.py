@@ -1,7 +1,5 @@
 import os
 import os.path
-import base64
-import hashlib
 import logging
 
 from PyQt4 import QtGui, QtCore
@@ -17,6 +15,7 @@ from processing import processAll, reportLogging
 
 import basics
 
+
 class TrezorPassphraseDialog(QtGui.QDialog, Ui_TrezorPassphraseDialog):
 
 	def __init__(self):
@@ -25,6 +24,7 @@ class TrezorPassphraseDialog(QtGui.QDialog, Ui_TrezorPassphraseDialog):
 
 	def passphrase(self):
 		return self.passphraseEdit.text()
+
 
 class Dialog(QtGui.QDialog, Ui_Dialog):
 
@@ -74,31 +74,30 @@ class Dialog(QtGui.QDialog, Ui_Dialog):
 		self.description3 = "</p></body></html>"
 
 		# Apply is not automatically set up, only OK is automatically set up
-		button = self.buttonBox.button(QtGui.QDialogButtonBox.Apply) # QtGui.QDialogButtonBox.Ok
+		button = self.buttonBox.button(QtGui.QDialogButtonBox.Apply)  # QtGui.QDialogButtonBox.Ok
 		button.clicked.connect(self.accept)
 		# Abort is automatically set up as Reject, like Cancel
 
-		# self.buttonBox.clicked.connect(self.handleButtonClick) # connects ALL buttons
+		# self.buttonBox.clicked.connect(self.handleButtonClick)  # connects ALL buttons
 		# Created the action in GUI with designer-qt4
-		self.actionApply.triggered.connect(self.accept) # Save
-		self.actionDone.triggered.connect(self.reject) # Quit
-		QtGui.QShortcut(QtGui.QKeySequence("Ctrl+Q"), self, self.reject) # Quit
-		QtGui.QShortcut(QtGui.QKeySequence("Ctrl+S"), self, self.accept) # Save
-		QtGui.QShortcut(QtGui.QKeySequence("Ctrl+A"), self, self.accept) # Apply
+		self.actionApply.triggered.connect(self.accept)  # Save
+		self.actionDone.triggered.connect(self.reject)  # Quit
+		QtGui.QShortcut(QtGui.QKeySequence("Ctrl+Q"), self, self.reject)  # Quit
+		QtGui.QShortcut(QtGui.QKeySequence("Ctrl+S"), self, self.accept)  # Save
+		QtGui.QShortcut(QtGui.QKeySequence("Ctrl+A"), self, self.accept)  # Apply
 		QtGui.QShortcut(QtGui.QKeySequence("Ctrl+C"), self, self.copy2Clipboard)
-		QtGui.QShortcut(QtGui.QKeySequence("Ctrl+V"), self, self.printAbout) # Version/About
-		QtGui.QShortcut(QtGui.QKeySequence("Ctrl+E"), self, self.setEnc) # Enc
-		QtGui.QShortcut(QtGui.QKeySequence("Ctrl+D"), self, self.setDec) #
-		QtGui.QShortcut(QtGui.QKeySequence("Ctrl+O"), self, self.setEncObf) #
-		QtGui.QShortcut(QtGui.QKeySequence("Ctrl+2"), self, self.setEncTwice) #
-		QtGui.QShortcut(QtGui.QKeySequence("Ctrl+T"), self, self.setEncDecSafe) #
-		QtGui.QShortcut(QtGui.QKeySequence("Ctrl+W"), self, self.setEncDecWipe) #
-		QtGui.QShortcut(QtGui.QKeySequence("Ctrl+M"), self, self.setEncFn) #
-		QtGui.QShortcut(QtGui.QKeySequence("Ctrl+N"), self, self.setDecFn) #
+		QtGui.QShortcut(QtGui.QKeySequence("Ctrl+V"), self, self.printAbout)  # Version/About
+		QtGui.QShortcut(QtGui.QKeySequence("Ctrl+E"), self, self.setEnc)  # Enc
+		QtGui.QShortcut(QtGui.QKeySequence("Ctrl+D"), self, self.setDec)  #
+		QtGui.QShortcut(QtGui.QKeySequence("Ctrl+O"), self, self.setEncObf)  #
+		QtGui.QShortcut(QtGui.QKeySequence("Ctrl+2"), self, self.setEncTwice)  #
+		QtGui.QShortcut(QtGui.QKeySequence("Ctrl+T"), self, self.setEncDecSafe)  #
+		QtGui.QShortcut(QtGui.QKeySequence("Ctrl+W"), self, self.setEncDecWipe)  #
+		QtGui.QShortcut(QtGui.QKeySequence("Ctrl+M"), self, self.setEncFn)  #
+		QtGui.QShortcut(QtGui.QKeySequence("Ctrl+N"), self, self.setDecFn)  #
 
 		self.clipboard = QtGui.QApplication.clipboard()
 		self.textBrowser.selectionChanged.connect(self.selectionChanged)
-
 
 	def printAbout(self):
 		"""
@@ -239,13 +238,13 @@ class Dialog(QtGui.QDialog, Ui_Dialog):
 		"""
 		called whenever selected text in textarea is changed
 		"""
-		# self.textBrowser.copy() # copy selected to clipboard
+		# self.textBrowser.copy()  # copy selected to clipboard
 		# reportLogging("Copied text to clipboard: %s" % self.clipboard.text(),
-		#	logging.DEBUG, "Clipboard", self.settings, self.logger, self)
-		""" empty """
+		# 	logging.DEBUG, "Clipboard", self.settings, self.logger, self)
+		pass
 
 	def copy2Clipboard(self):
-		self.textBrowser.copy() # copy selected to clipboard
+		self.textBrowser.copy()  # copy selected to clipboard
 		# This is content from the Status textarea, so no secrets here, we can log it
 		reportLogging("Copied text to clipboard: %s" % self.clipboard.text(), logging.DEBUG,
 			"Clipboard", self.settings, self.logger, self)
@@ -363,13 +362,13 @@ class Dialog(QtGui.QDialog, Ui_Dialog):
 		self.radioButtonDecFilename.setChecked(arg)
 
 	def pw1(self):
-		return self.masterEdit1.text()
+		return q2s(self.masterEdit1.text())
 
 	def setPw1(self, arg):
 		self.masterEdit1.setText(s2q(arg))
 
 	def pw2(self):
-		return self.masterEdit2.text()
+		return q2s(self.masterEdit2.text())
 
 	def setPw2(self, arg):
 		self.masterEdit2.setText(s2q(arg))
@@ -427,13 +426,13 @@ class Dialog(QtGui.QDialog, Ui_Dialog):
 		button.setEnabled(fileSelected and (same or self.dec() or self.decFn()))
 		return fileSelected and (same or self.dec() or self.decFn())
 
-#	def handleButtonClick(self, button):
-#		sb = self.buttonBox.standardButton(button)
-#		if sb == QtGui.QDialogButtonBox.Apply:
-#			processAll(self.trezor, self.settings, self.fileMap, self.logger, self) #
-#		# elif sb == QtGui.QDialogButtonBox.Reset:
-#		#	reportLogging("Reset Clicked, quitting now...", logging.DEBUG,
-#		#		"UI", self.settings, self.logger, self)
+	# def handleButtonClick(self, button):
+		# sb = self.buttonBox.standardButton(button)
+		# if sb == QtGui.QDialogButtonBox.Apply:
+		# 	processAll(self.trezor, self.settings, self.fileMap, self.logger, self)
+		# # elif sb == QtGui.QDialogButtonBox.Reset:
+		# #	reportLogging("Reset Clicked, quitting now...", logging.DEBUG,
+		# #		"UI", self.settings, self.logger, self)
 
 	def accept(self):
 		"""
@@ -442,7 +441,7 @@ class Dialog(QtGui.QDialog, Ui_Dialog):
 		if self.validate():
 			reportLogging("Apply was called by user request. Start processing now.",
 				logging.DEBUG, "GUI IO", self.settings, self.logger, self)
-			processAll(self.trezor, self.settings, self.fileMap, self.logger, self) #
+			processAll(self.trezor, self.settings, self.fileMap, self.logger, self)  #
 		else:
 			reportLogging("Apply was called by user request. Apply is denied. "
 				"User input is not valid for processing. Did you select a file?",
@@ -451,7 +450,7 @@ class Dialog(QtGui.QDialog, Ui_Dialog):
 	# Don't set up a reject() method, it is automatically created.
 	# If created here again it would overwrite the default one
 	# def reject(self):
-	#	self.close()
+	# 	self.close()
 
 	def selectFile(self):
 		"""
@@ -460,18 +459,19 @@ class Dialog(QtGui.QDialog, Ui_Dialog):
 		path = QtCore.QDir.currentPath()
 		dialog = QtGui.QFileDialog(self, "Select file(s)",
 			path, "(*)")
-		dialog.setFileMode(QtGui.QFileDialog.ExistingFiles);
+		dialog.setFileMode(QtGui.QFileDialog.ExistingFiles)
 		dialog.setAcceptMode(QtGui.QFileDialog.AcceptOpen)
 
 		res = dialog.exec_()
 		if not res:
 			return
 
-		qFnameList = dialog.selectedFiles() # QStringList
-		self.fileNames = str(qFnameList.join("<join>")).split("<join>") # convert to Py list
+		qFnameList = dialog.selectedFiles()  # QStringList
+		self.fileNames = str(qFnameList.join("<join>")).split("<join>")  # convert to Py list
 		reportLogging("Selected files are: %s" % str(self.fileNames),
 			logging.DEBUG, "GUI IO", self.settings, self.logger, self)
 		self.setSelectedFile(self.fileNames)
+
 
 class EnterPinDialog(QtGui.QDialog, Ui_EnterPinDialog):
 
@@ -490,13 +490,14 @@ class EnterPinDialog(QtGui.QDialog, Ui_EnterPinDialog):
 		self.pb9.clicked.connect(self.pinpadPressed)
 
 	def pin(self):
-		return self.pinEdit.text()
+		return q2s(self.pinEdit.text())
 
 	def pinpadPressed(self):
 		sender = self.sender()
 		objName = sender.objectName()
 		digit = objName[-1]
 		self.pinEdit.setText(self.pinEdit.text() + digit)
+
 
 class TrezorChooserDialog(QtGui.QDialog, Ui_TrezorChooserDialog):
 
