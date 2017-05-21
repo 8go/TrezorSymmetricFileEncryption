@@ -1,15 +1,18 @@
-import struct
-
-from PyQt4 import QtCore
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
 
 import os
 import os.path
 import random
+import struct
+
+from PyQt4 import QtCore
 
 
-def q2s(s):
+def q2s(q):
 	"""Convert QString to UTF-8 string object"""
-	return str(s.toUtf8())
+	return str(q.toUtf8())
 
 
 def s2q(s):
@@ -33,21 +36,21 @@ class Magic(object):
 	for keys.
 	"""
 
-	headerStr = "TSFE"
+	headerStr = b'TSFE'
 	hdr = u("!I", headerStr)
 
 	# first level encryption
 	# unlock key for first level AES encryption, key from Trezor, en/decryption on PC
-	levelOneNode = [hdr, u("!I", "DEC1")]
+	levelOneNode = [hdr, u("!I", b'DEC1')]
 	levelOneKey = "Decrypt file for first time?"  # string to derive wrapping key from
 
 	# second level encryption
 	# second level AES encryption, de/encryption on trezor device
-	levelTwoNode = [hdr, u("!I", "DEC2")]
+	levelTwoNode = [hdr, u("!I", b'DEC2')]
 	levelTwoKey = "Decrypt file for second time?"
 
 	# only used for filename encryption (no confirm button click desired)
-	fileNameNode = [hdr, u("!I", "FLNM")]  # filename encryption for filename obfuscation
+	fileNameNode = [hdr, u("!I", b'FLNM')]  # filename encryption for filename obfuscation
 	fileNameKey = "Decrypt filename only?"
 
 

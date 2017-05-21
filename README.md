@@ -46,7 +46,7 @@ Below a sample screenshot. More screenshots [here](screenshots).
 # Build and runtime requirements
 
   * Use of passphrases must have been already enabled on your [Trezor](https://www.trezor.io) device.
-  * [Python](https://www.python.org/)
+  * [Python](https://www.python.org/) v2.7
   * PyCrypto
   * PyQt4
   * [trezorlib from python-trezor](https://github.com/trezor/python-trezor)
@@ -73,7 +73,7 @@ Run-time command line options are
 
 ```
 TrezorSymmetricFileEncryption.py [-v] [-h] [-l <level>] [-t] [-e | -o | -d | -m | -n] [-2] [-s] [-w] [-p <passphrase>] [-r] [-R] <files>
-    -v, --verion
+    -v, --version
             print the version number
     -h, --help
             print short help text
@@ -266,7 +266,7 @@ single-file-executablefile.
 - - -
 **Question:** In which language is TrezorSymmetricFileEncryption written?
 
-**Answer:** [Python](https://www.python.org/).
+**Answer:** [Python](https://www.python.org/) 2.7. It wil currently not run on Python 3.
 - - -
 **Question:** Do I need to have a [Trezor](https://www.trezor.io/) in
 order to use TrezorSymmetricFileEncryption?
