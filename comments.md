@@ -72,3 +72,35 @@ The Trezor chip is slow. It takes the Trezor (model 1) device about  75 seconds 
 - [x] make the image smaller on main window
 - [x] more Testing
 - [ ] get help with getting the word out, anyone wants to spread the word on Twitter, Reddit, with Trezor, Facebook, etc.?
+
+# Migrating to Python3
+
+Doing only Python 2.7 or only 3.4 is okay, but making both work on the same code base is cumbersome.
+The combination would be Py2.7 | Py3.4 + PyQt4.11.
+
+* Basic description of the problem is [here](https://docs.python.org/3/howto/pyporting.html) with some pointers as how to start.
+* [2to3](https://docs.python.org/3/library/2to3.html) has been done. It was trivial. Only a few lines of code changed.
+* [modernize](https://python-modernize.readthedocs.io/en/latest/) has been done. Again, it was just suggesting a few new lines related to the `range` operator.
+* [futurize](http://python-future.org/automatic_conversion.html) was also done. It suggested only a few `import` lines. The 3 lines were added to all .py files.
+```
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+```
+* Changes related to GUI are:
+PyQt4.11 for Py3.4 does not have class QString. It expects unicode objects. Simple hacks like
+the folowing are not likely to work.
+```
+try:
+    from PyQt4.QtCore import QString
+except ImportError:
+    # we are using Python3 so QString is not defined
+    QString = type("")
+```
+* Since Py2.7 does not have bytes and handles everything as strings. A common layer would have to be introduced
+that simulates bytes on Py2.7. Some good code starting points can be found at
+[python3porting.com](http://python3porting.com/problems.html#bytes-strings-and-unicode).
+* In Debian 9 Py2 will remain the default Py version, so Py2.7 does not seem to be going away.
+
+In short, for the time being it does not seem worth it to add code to make it run on both 2.7 and 3.4.
+It seems one can wait until 2.7 becomes outdated and then port to 3.5, breaking and leaving 2.7 behind.

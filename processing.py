@@ -1,3 +1,7 @@
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import sys
 import logging
 import getopt
@@ -146,12 +150,12 @@ def shred(filename, passes, settings=None, logger=None, dialog=None):
 			raise IOError("Cannot shred, \"%s\" is not a file." % filename)
 
 		ld = os.path.getsize(filename)
-		with open(filename, "w") as fh:
+		with open(filename, "wb") as fh:
 			for _ in range(int(passes)):
-				data = "0" * ld
+				data = b'\x00' * ld
 				fh.write(data)
 				fh.seek(0,  0)
-		with open(filename, "w") as fh:
+		with open(filename, "wb") as fh:
 			fh.truncate(0)
 		urandom_entropy = os.urandom(64)
 		randomBin = hashlib.sha256(urandom_entropy).digest()
@@ -161,7 +165,7 @@ def shred(filename, passes, settings=None, logger=None, dialog=None):
 		randomB64 = randomB64 + base64.urlsafe_b64encode(randomBin).replace("=", "-")
 		os.rename(filename, randomB64)
 		os.remove(randomB64)
-	except IOError, e:
+	except IOError as e:
 		if settings is not None and logger is not None and dialog is not None:
 			reportLogging("Skipping shredding of file \"%s\" (IO error: %s)" %
 				(filename, e), logging.WARN,
@@ -184,10 +188,10 @@ def shred(filename, passes, settings=None, logger=None, dialog=None):
 
 
 def usage():
-	print """TrezorSymmetricFileEncryption.py [-v] [-h] [-l <level>] [-t]
+	print("""TrezorSymmetricFileEncryption.py [-v] [-h] [-l <level>] [-t]
 				[-e | -o | -d | -m | -n]
 				[-2] [-s] [-w] [-p <passphrase>] [-r] [-R] <files>
-		-v, --verion
+		-v, --version
 				print the version number
 		-h, --help
 				print short help text
@@ -312,7 +316,7 @@ def usage():
 		Set twice option: Control-2
 		Set safety option: Control-T
 		Set wipe option: Control-W
-		"""
+		""")
 
 
 def printVersion():
@@ -335,11 +339,11 @@ def parseArgs(argv, settings, logger):
 			["version", "help", "logging=", "terminal", "encnameonly", "decnameonly",
 			"twice", "safety", "decrypt", "encrypt", "obfuscatedencrypt",
 			"passphrase=", "readpinfromstdin", "readpassphrasefromstdin"])
-	except getopt.GetoptError, e:
+	except getopt.GetoptError as e:
 		msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Critical, "Wrong arguments",
-			"Error: %s" % str(e))
+			"Error: %s" % e)
 		msgBox.exec_()
-		logger.critical('Wrong arguments. Error: %s.', str(e))
+		logger.critical('Wrong arguments. Error: %s.', e)
 		sys.exit(2)
 	loglevelused = False
 	for opt, arg in opts:
@@ -380,7 +384,7 @@ def parseArgs(argv, settings, logger):
 	if loglevelused:
 		try:
 			loglevel = int(loglevelarg)
-		except Exception, e:
+		except Exception as e:
 			reportLogging("Logging level not specified correctly. "
 				"Must be integer between 1 and 5. (%s)" % loglevelarg, logging.CRITICAL,
 				"Wrong arguments", settings, logger)
@@ -472,12 +476,12 @@ def reportLogging(str, level, title, settings, logger, dialog=None):
 		guiExists = True
 	if level == logging.NOTSET:
 		if settings.TArg:
-			print str  # stdout
+			print(str)  # stdout
 		elif guiExists:
-			print str  # stdout
+			print(str)  # stdout
 			dialog.appendDescription("<br>%s" % (str))
 		else:
-			print str  # stdout
+			print(str)  # stdout
 			msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Information,
 				title, "%s" % (str))
 			msgBox.exec_()
@@ -814,7 +818,7 @@ def encryptFile(inputFile, settings, fileMap, obfuscate, twice, outerKey, outerI
 			"(model 1) takes about 75 seconds, or 0.8MB/min. The file \"%s\" "
 			"would take about %d minutes. If you want to en/decrypt fast "
 			"remove the `-2` or `--twice` option." %
-			(tail, os.path.getsize(inputFile) / 819200),
+			(tail, os.path.getsize(inputFile) // 819200),
 			logging.WARNING, "Filename obfuscation",
 			settings, logger, dialog)  # 800K/min
 
@@ -1057,12 +1061,12 @@ def doWork(settings, fileMap, logger, dialog):
 				logging.CRITICAL,
 				"Trezor IO", settings, logger, dialog)
 			sys.exit(6)
-		except IOError, e:
+		except IOError as e:
 			reportLogging("IO error: %s" % e, logging.CRITICAL,
 				"Critical Exception", settings, logger, dialog)
 			if logger.getEffectiveLevel() == logging.DEBUG:
 				traceback.print_exc()  # prints to stderr
-		except Exception, e:
+		except Exception as e:
 			reportLogging("Critical error: %s" % e, logging.CRITICAL,
 				"Critical Exception", settings, logger, dialog)
 			if logger.getEffectiveLevel() == logging.DEBUG:

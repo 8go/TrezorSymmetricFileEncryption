@@ -10,6 +10,10 @@ Source and readme is on www.github.com, search for TrezorSymmetricFileEncryption
 
 '''
 
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import sys
 import logging
 import getpass
@@ -46,17 +50,17 @@ class QtTrezorMixin(object):
 
 	def callback_PassphraseRequest(self, msg):
 		if self.passphrase is not None:
-			return proto.PassphraseAck(passphrase=unicode(self.passphrase))
+			return proto.PassphraseAck(passphrase=str(self.passphrase))
 
 		if self.readpassphrasefromstdin:
 			# read passphrase from stdin
 			try:
 				passphrase = getpass.getpass("Please enter passphrase: ")
-				passphrase = unicode(passphrase)
+				passphrase = str(passphrase)
 			except KeyboardInterrupt:
 				sys.stderr.write("\nKeyboard interrupt: passphrase not read. Aborting.\n")
 				sys.exit(3)
-			except Exception, e:
+			except Exception as e:
 				sys.stderr.write("Critical error: Passphrase not read. Aborting. (%s)" % e)
 				sys.exit(3)
 		else:
@@ -65,22 +69,22 @@ class QtTrezorMixin(object):
 				sys.exit(3)
 			else:
 				passphrase = dialog.passphraseEdit.text()
-				passphrase = unicode(passphrase)
+				passphrase = str(passphrase)
 
 		return proto.PassphraseAck(passphrase=passphrase)
 
 	def callback_PinMatrixRequest(self, msg):
 		if self.readpinfromstdin:
 			# read PIN from stdin
-			print "                  7  8  9"
-			print "                  4  5  6"
-			print "                  1  2  3"
+			print("                  7  8  9")
+			print("                  4  5  6")
+			print("                  1  2  3")
 			try:
 				pin = getpass.getpass("Please enter PIN: ")
 			except KeyboardInterrupt:
 				sys.stderr.write("\nKeyboard interrupt: PIN not read. Aborting.\n")
 				sys.exit(7)
-			except Exception, e:
+			except Exception as e:
 				sys.stderr.write("Critical error: PIN not read. Aborting. (%s)" % e)
 				sys.exit(7)
 		else:
@@ -234,7 +238,7 @@ processing.parseArgs(sys.argv[1:], settings, logger)
 try:
 	trezorChooser = TrezorChooser()
 	trezor = trezorChooser.getDevice()
-except (ConnectionError, RuntimeError), e:
+except (ConnectionError, RuntimeError) as e:
 	processing.reportLogging("Connection to Trezor failed: %s" % e.message,
 		logging.CRITICAL, "Trezor Error", settings, logger)
 	sys.exit(1)

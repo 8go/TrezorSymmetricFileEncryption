@@ -1,3 +1,7 @@
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import os
 import os.path
 import sys
@@ -80,7 +84,7 @@ class FileMap(object):
 					"Change file permissions and try again." % (fname))
 
 		self.loadBlobFromEncFile(originalFilename)
-		with open(fname, 'w+b') as f:
+		with open(fname, "wb") as f:
 			s = len(self.blob)
 			f.write(self.blob)
 			if f.tell() != s:
@@ -118,7 +122,7 @@ class FileMap(object):
 
 		@throws IOError: if reading file failed
 		"""
-		with open(fname, 'rb') as f:
+		with open(fname, "rb") as f:
 			header = f.read(len(Magic.headerStr))
 			if header != Magic.headerStr:
 				raise IOError("Bad header in storage file")
@@ -202,7 +206,7 @@ class FileMap(object):
 		@param innerIv: see outerKey
 		"""
 
-		with open(fname, 'rb') as f:
+		with open(fname, "rb") as f:
 			# Size 0 will read the ENTIRE file into memory!
 			# File is open read-only
 			# mmap does not implement __exit__ so we cannot use "with mmap... as m:"
@@ -427,15 +431,15 @@ class FileMap(object):
 			try:
 				encrypted += self.trezor.encrypt_keyvalue(Magic.levelTwoNode,
 					ukeystring, padded, ask_on_encrypt=False, ask_on_decrypt=first, iv=rndBlock)
-			except Exception, e:
+			except Exception as e:
 				self.logger.critical('Trezor failed. (%s)', e)
 				raise
 			first = False
 			curr += 1
 			if self.logger.getEffectiveLevel() == logging.DEBUG:
-				print >> sys.stderr, "\rencrypting block", curr, "of", max,
+				sys.stderr.write("\rencrypting block %d of %d" % (curr, max),)
 		if self.logger.getEffectiveLevel() == logging.DEBUG:
-			print >> sys.stderr, "done"
+			sys.stderr.write(" --> done\n")
 		ret = rndBlock + encrypted
 		self.logger.debug("Trezor encryption: plain-size = %d, encrypted-size = %d", len(blob),  len(ret))
 		self.logger.debug('time leaving encryptOnTrezorDevice: %s', datetime.datetime.now())
@@ -453,7 +457,7 @@ class FileMap(object):
 				"Decrypting each Megabyte on the Trezor (model 1) takes about 75 seconds, "
 				"or 0.8MB/min. This file will take about %d minutes. If you want to "
 				"en/decrypt fast the next time around, remove the `-2` or `--twice` "
-				"option when you encrypt a file.", len(encryptedblob) / 819200)
+				"option when you encrypt a file.", len(encryptedblob) // 819200)
 		self.logger.debug('time entering decryptOnTrezorDevice: %s', datetime.datetime.now())
 		ukeystring = keystring.decode("utf-8")
 		iv, encryptedblob = encryptedblob[:BLOCKSIZE], encryptedblob[BLOCKSIZE:]
@@ -469,16 +473,16 @@ class FileMap(object):
 			try:
 				plain = self.trezor.decrypt_keyvalue(Magic.levelTwoNode,
 					ukeystring, junk, ask_on_encrypt=False, ask_on_decrypt=first, iv=iv)
-			except Exception, e:
+			except Exception as e:
 				self.logger.critical('Trezor failed. (%s)', e)
 				raise
 			first = False
 			blob += Padding(BLOCKSIZE).unpad(plain)
 			curr += 1
 			if self.logger.getEffectiveLevel() == logging.DEBUG:
-				print >> sys.stderr, "\rdecrypting block", curr, "of", max,
+				sys.stderr.write("\rdecrypting block %d of %d" % (curr, max),)
 		if self.logger.getEffectiveLevel() == logging.DEBUG:
-			print >> sys.stderr, "done"
+			sys.stderr.write(" --> done\n")
 		self.logger.debug("Trezor decryption: encrypted-size = %d, plain-size = %d",
 			len(encryptedblob),  len(blob))
 		if len(blob) == 0:
