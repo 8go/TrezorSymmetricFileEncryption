@@ -44,28 +44,44 @@ Below a sample screenshot. More screenshots [here](screenshots).
 # Build and runtime requirements
 
   * Use of passphrases must have been already enabled on your [Trezor](https://www.trezor.io) device.
-  * [Python](https://www.python.org/) v2.7
-  * PyCrypto
-  * PyQt4
+  * [Trezor](https://www.trezor.io) device
+  * [Python](https://www.python.org/) v2.7 or 3.4+
+  * [PyCrypto](https://pypi.python.org/pypi/pycrypto)
+  * [PyQt5](https://pypi.python.org/pypi/PyQt5)
+  * [Qt5](https://doc.qt.io/qt-5/)
   * [trezorlib from python-trezor](https://github.com/trezor/python-trezor)
+  * [Versions 0.5.0 and older used PyQy4 instead of PyQy5. Read the README.md
+  file of v0.5.0 for build requirements, dependencies, etc. Basically anything
+  relating to PyQt5 has to be replaced with the corresponding component in PyQt4.
+  `pyuic5` becomes `pyuic4`. `pyqt5-dev-tools` becomes `pyqt4-dev-tools`
+  and so forth.]
 
 # Building
 
-Even though the whole code is in Python, there are few Qt `.ui` form files that
+Even though the whole code is in Python, there are few Qt5 `.ui` form files that
 need to be transformed into Python files. There is `Makefile`, you just need to run
 
     make
 
 ## Build requirements
 
-PyQt4 development tools are necessary, namely `pyuic4` (look for packages named
-like `pyqt4-dev-tools` or `PyQt4-devel`).
+* PyQt5 development tools are necessary, namely `pyuic5` (look for a package named
+`pyqt5-dev-tools`, `PyQt5-devel` or similar). Required to run `make`.
+* Depending on one's set-up one might need: `qttools5-dev-tools`
+(also sets up some of the Qt5 environment variables)
+* Depending on one's set-up one might need: `python-pyqt5` (Qt5 bindings for Python 2)
+* Depending on one's set-up one might need: `python3-pyqt5` (Qt5 bindings for Python 3)
+* Depending on one's set-up one might need: `python-pyqt5.qtsvg` (to display SVG logos in Python 2)
+* Depending on one's set-up one might need: `python3-pyqt5.qtsvg` (to display SVG logos in Python 3)
 
 # Running
 
 Run:
 
     python TrezorSymmetricFileEncryption.py
+or
+
+    python3 TrezorSymmetricFileEncryption.py
 
 Run-time command line options are
 
@@ -264,7 +280,7 @@ single-file-executablefile.
 - - -
 **Question:** In which language is TrezorSymmetricFileEncryption written?
 
-**Answer:** [Python](https://www.python.org/) 2.7. It wil currently not run on Python 3.
+**Answer:** [Python](https://www.python.org/). It runs on Python 2.7 and 3.4+.
 - - -
 **Question:** Do I need to have a [Trezor](https://www.trezor.io/) in
 order to use TrezorSymmetricFileEncryption?
@@ -366,9 +382,9 @@ written yet.
 TrezorSymmetricFileEncryption available?
 
 **Answer:** On all platforms, operating systems where
-[Python](https://www.python.org/) and PyQt4 is available: Windows, Linux, Unix,
-Mac OS X. Internet searches show Python for Android and iOS,
-but it has not been investigated or tested on Android or iOS.
+[Python](https://www.python.org/) and PyQt5 is available: Windows, Linux, Unix,
+Mac OS X. Internet searches show Python and PyQt5 for Android and iOS,
+but it has not been investigated, built, or tested on Android or iOS.
 Testing has only been done on Linux.
 - - -
 **Question:** Is it fast?
