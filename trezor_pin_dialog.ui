@@ -1,25 +1,25 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>EnterPinDialog</class>
- <widget class="QDialog" name="EnterPinDialog">
+ <class>TrezorPinDialog</class>
+ <widget class="QDialog" name="TrezorPinDialog">
   <property name="geometry">
    <rect>
     <x>0</x>
     <y>0</y>
     <width>400</width>
-    <height>300</height>
+    <height>340</height>
    </rect>
   </property>
   <property name="minimumSize">
    <size>
     <width>180</width>
-    <height>200</height>
+    <height>300</height>
    </size>
   </property>
   <property name="maximumSize">
    <size>
     <width>400</width>
-    <height>300</height>
+    <height>360</height>
    </size>
   </property>
   <property name="windowTitle">
@@ -30,6 +30,22 @@
     <normaloff>icons/trezor.bg.svg</normaloff>icons/trezor.bg.svg</iconset>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="QLabel" name="logo">
+     <property name="text">
+      <string/>
+     </property>
+     <property name="pixmap">
+      <pixmap>icons/trezor.38x55.svg</pixmap>
+     </property>
+     <property name="scaledContents">
+      <bool>false</bool>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignCenter</set>
+     </property>
+    </widget>
+   </item>
    <item>
     <widget class="QLabel" name="label">
      <property name="text">
@@ -74,6 +90,12 @@
      </item>
      <item row="4" column="0" colspan="3">
       <widget class="QLineEdit" name="pinEdit">
+       <property name="inputMethodHints">
+        <set>Qt::ImhDigitsOnly|Qt::ImhHiddenText|Qt::ImhNoAutoUppercase|Qt::ImhNoPredictiveText|Qt::ImhSensitiveData</set>
+       </property>
+       <property name="maxLength">
+        <number>9</number>
+       </property>
        <property name="echoMode">
         <enum>QLineEdit::Password</enum>
        </property>
@@ -153,7 +175,7 @@
   <connection>
    <sender>buttonBox</sender>
    <signal>accepted()</signal>
-   <receiver>EnterPinDialog</receiver>
+   <receiver>TrezorPinDialog</receiver>
    <slot>accept()</slot>
    <hints>
     <hint type="sourcelabel">
@@ -169,7 +191,7 @@
   <connection>
    <sender>buttonBox</sender>
    <signal>rejected()</signal>
-   <receiver>EnterPinDialog</receiver>
+   <receiver>TrezorPinDialog</receiver>
    <slot>reject()</slot>
    <hints>
     <hint type="sourcelabel">

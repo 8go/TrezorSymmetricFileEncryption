@@ -101,6 +101,7 @@ except ImportError:
 that simulates bytes on Py2.7. Some good code starting points can be found at
 [python3porting.com](http://python3porting.com/problems.html#bytes-strings-and-unicode).
 * In Debian 9 Py2 will remain the default Py version, so Py2.7 does not seem to be going away.
+* According to Python.org Python 2.7 will be maintained till 2020.
 
 In short, for the time being it does not seem worth it to add code to make it run on both 2.7 and 3.4.
 It seems one can wait until 2.7 becomes outdated and then port to 3.5, breaking and leaving 2.7 behind.

@@ -2,56 +2,72 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import sys
 import os
 import os.path
 import random
 import struct
+import unicodedata
 
-from PyQt4 import QtCore
+"""
+This is generic code that should work untouched accross all applications.
+This code implements generic encoding functions.
 
-
-def q2s(q):
-	"""Convert QString to UTF-8 string object"""
-	return str(q.toUtf8())
-
-
-def s2q(s):
-	"""Convert UTF-8 encoded string to QString"""
-	return QtCore.QString.fromUtf8(s)
+Code should work on both Python 2.7 as well as 3.4.
+Requires PyQt5.
+(Old version supported PyQt4.)
+"""
 
 
-def u(fmt, s):
+def unpack(fmt, s):
 	# 	u = lambda fmt, s: struct.unpack(fmt, s)[0]
 	return(struct.unpack(fmt, s)[0])
 
 
-def p(fmt, s):
-	# 	u = lambda fmt, s: struct.unpack(fmt, s)[0]
+def pack(fmt, s):
+	# 	p = lambda fmt, s: struct.pack(fmt, s)[0]
 	return(struct.pack(fmt, s))
 
 
-class Magic(object):
+def normalize_nfc(txt):
 	"""
-	Few magic constant definitions so that we know which nodes to search
-	for keys.
+	Utility function to bridge Py2 and Py3 incompatibilities.
+	Convert to NFC unicode.
+	Takes string-equivalent or bytes-equivalent and
+	returns str-equivalent in NFC unicode format.
+	Py2: str (aslias bytes), unicode
+	Py3: bytes, str (in unicode format)
 	"""
+	if sys.version_info[0] < 3:
+		if isinstance(txt, unicode):
+			return unicodedata.normalize('NFC', txt)
+		if isinstance(txt, str):
+			return unicodedata.normalize('NFC', txt.decode('utf-8'))
+	else:
+		if isinstance(txt, bytes):
+			return unicodedata.normalize('NFC', txt.decode('utf-8'))
+		if isinstance(txt, str):
+			return unicodedata.normalize('NFC', txt)
 
-	headerStr = b'TSFE'
-	hdr = u("!I", headerStr)
 
-	# first level encryption
-	# unlock key for first level AES encryption, key from Trezor, en/decryption on PC
-	levelOneNode = [hdr, u("!I", b'DEC1')]
-	levelOneKey = "Decrypt file for first time?"  # string to derive wrapping key from
-
-	# second level encryption
-	# second level AES encryption, de/encryption on trezor device
-	levelTwoNode = [hdr, u("!I", b'DEC2')]
-	levelTwoKey = "Decrypt file for second time?"
-
-	# only used for filename encryption (no confirm button click desired)
-	fileNameNode = [hdr, u("!I", b'FLNM')]  # filename encryption for filename obfuscation
-	fileNameKey = "Decrypt filename only?"
+def tobytes(txt):
+	"""
+	Utility function to bridge Py2 and Py3 incompatibilities.
+	Convert to bytes.
+	Takes string-equivalent or bytes-equivalent and returns bytesequivalent.
+	Py2: str (aslias bytes), unicode
+	Py3: bytes, str (in unicode format)
+	"""
+	if sys.version_info[0] < 3:
+		if isinstance(txt, unicode):
+			return txt.encode('utf-8')
+		if isinstance(txt, str):  # == bytes
+			return txt
+	else:
+		if isinstance(txt, bytes):
+			return txt
+		if isinstance(txt, str):
+			return txt.encode('utf-8')
 
 
 class Padding(object):
@@ -63,11 +79,23 @@ class Padding(object):
 		self.blocksize = blocksize
 
 	def pad(self, s):
+		"""
+		In Python 2 input s is a string, a char list.
+		Python 2 returns a string.
+		In Python 3 input s is bytes.
+		Python 3 returns bytes.
+		"""
 		BS = self.blocksize
-		return s + (BS - len(s) % BS) * chr(BS - len(s) % BS)
+		if sys.version_info[0] > 2:
+			return s + (BS - len(s) % BS) * bytes([BS - len(s) % BS])
+		else:
+			return s + (BS - len(s) % BS) * chr(BS - len(s) % BS)
 
 	def unpad(self, s):
-		return s[0:-ord(s[-1])]
+		if sys.version_info[0] > 2:
+			return s[0:-s[-1]]
+		else:
+			return s[0:-ord(s[-1])]
 
 
 class PaddingHomegrown(object):
@@ -75,10 +103,10 @@ class PaddingHomegrown(object):
 	Pad filenames that are already base64 encoded. Must have length of multiple of 4.
 	Base64 always have a length of mod 4, padded with =
 	Examples: YQ==, YWI=, YWJj, YWJjZA==, YWJjZGU=, YWJjZGVm, ...
-	On howngrown padding we remove the = pad, then we pad to a mod 16.
+	On homegrown padding we remove the = pad, then we pad to a mod 16 length.
 	If length is already mod 16, it will be padded with 16 chars. So in all cases we pad.
 	The last letter always represents how many chars have been padded (A=1, ..., P=16).
-	The last letter is out of the alphabet A..P.
+	The last letter is in the alphabet A..P.
 	The padded letters before the last letter are pseudo-random in the a..zA..Z alphabet.
 	"""
 
@@ -88,14 +116,15 @@ class PaddingHomegrown(object):
 
 	def pad(self, s):
 		"""
-		input must be in valid base64 format
+		Input must be a string in valid base64 format.
+		Returns a string.
 		"""
 		# the randomness can be poor, it does not matter,
 		# it is just used for buffer letters in the file name
 		urandom_entropy = os.urandom(64)
 		random.seed(urandom_entropy)
 		# remove the base64 buffer char =
-		t = s.translate(None, '=')
+		t = s.replace(u'=', u'')
 		initlen = len(t)
 		BS = self.homegrownblocksize
 		bufLen = BS - len(t) % BS
@@ -120,6 +149,10 @@ class PaddingHomegrown(object):
 		return t
 
 	def unpad(self, s):
+		"""
+		Input must be a string in valid base64 format.
+		Returns a string.
+		"""
 		t = s[0:-(ord(s[-1])-ord('A')+1)]
 		BS = self.base64blocksize
 		return t + "=" * ((BS - len(t) % BS) % BS)

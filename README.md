@@ -9,8 +9,6 @@
 `TrezorSymmetricFileEncryption` is a small, simple tool that
 allows you to symmetrically encrypt and decrypt files.
 
-Note that it is software, currently in alpha stage.
-
 # Features
 
   * Trezor convenience
