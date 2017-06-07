@@ -359,7 +359,8 @@ class FileMap(object):
 		# we do not use an IV here so that we can quickly deobfuscate
 		# filenames without having to read the file
 		encFn = self.trezor.encrypt_keyvalue(basics.Magic.fileNameNode,
-			basics.Magic.fileNameKey, pad16, ask_on_encrypt=False, ask_on_decrypt=True)
+			basics.Magic.fileNameKey, pad16, ask_on_encrypt=False,
+			ask_on_decrypt=not self.settings.QArg)
 		bs64 = base64.urlsafe_b64encode(encFn)  # mod 4
 		bs64Str = encoding.normalize_nfc(bs64)
 		ret = PaddingHomegrown().pad(bs64Str)  # mod 16
@@ -386,7 +387,8 @@ class FileMap(object):
 		# filenames without having to read the file
 		encFn = self.trezor.encrypt_keyvalue(basics.Magic.fileNameNode,
 			basics.Magic.fileNameKey, pad16,
-			ask_on_encrypt=False, ask_on_decrypt=True, iv=self.baddressIv)
+			ask_on_encrypt=False, ask_on_decrypt=not self.settings.QArg,
+			iv=self.baddressIv)
 		bs64 = base64.urlsafe_b64encode(encFn)  # mod 4
 		bs64Str = encoding.normalize_nfc(bs64)
 		ret = PaddingHomegrown().pad(bs64Str)  # mod 16
@@ -417,7 +419,7 @@ class FileMap(object):
 		# we do not use an IV here so that we can quickly deobfuscate filenames
 		# without reading the file, even for files that do not exist
 		decFn = self.trezor.decrypt_keyvalue(basics.Magic.fileNameNode, basics.Magic.fileNameKey,
-			bs64, ask_on_encrypt=False, ask_on_decrypt=True)
+			bs64, ask_on_encrypt=False, ask_on_decrypt=not self.settings.QArg)
 		ret = Padding(BLOCKSIZE).unpad(decFn)
 		retStr = encoding.normalize_nfc(ret)
 		self.settings.mlogger.log("The plaintext filename for %s is %s." % (obfuscatedFileName, retStr), logging.DEBUG, "Encryption")
@@ -449,7 +451,8 @@ class FileMap(object):
 		# we do not use an IV here so that we can quickly deobfuscate filenames
 		# without reading the file, even for files that do not exist
 		decFn = self.trezor.decrypt_keyvalue(basics.Magic.fileNameNode, basics.Magic.fileNameKey,
-			bs64, ask_on_encrypt=False, ask_on_decrypt=True, iv=self.baddressIv)
+			bs64, ask_on_encrypt=False, ask_on_decrypt=not self.settings.QArg,
+			iv=self.baddressIv)
 		ret = Padding(BLOCKSIZE).unpad(decFn)
 		retStr = encoding.normalize_nfc(ret)
 		# self.settings.mlogger.log("\n\tobfuscatedFileName is %s (%d), "
@@ -501,7 +504,8 @@ class FileMap(object):
 		self.settings.mlogger.log("Press confirm on Trezor device to decrypt "
 			"key for first level of file decryption (if necessary).", logging.DEBUG, "Encryption")
 		ret = self.trezor.decrypt_keyvalue(basics.Magic.levelOneNode, basics.Magic.levelOneKey,
-			wrappedOuterKey, ask_on_encrypt=False, ask_on_decrypt=True, iv=iv)
+			wrappedOuterKey, ask_on_encrypt=False,
+			ask_on_decrypt=not self.settings.QArg, iv=iv)
 		if len(ret) == 0:
 			raise ValueError("Decrypting data failed. Wrong Trezor device?")
 		return ret
@@ -511,7 +515,8 @@ class FileMap(object):
 		Encrypt/wrap a key. Its size must be multiple of 16.
 		"""
 		ret = self.trezor.encrypt_keyvalue(basics.Magic.levelOneNode, basics.Magic.levelOneKey,
-			keyToWrap, ask_on_encrypt=False, ask_on_decrypt=True, iv=iv)
+			keyToWrap, ask_on_encrypt=False,
+			ask_on_decrypt=not self.settings.QArg, iv=iv)
 		return ret
 
 	def encryptOnTrezorDevice(self, blob, keystring, innerIv=None):
@@ -536,7 +541,7 @@ class FileMap(object):
 		# trezor.encrypt_keyvalue() throws error on anythin larger than 1024
 		# In order to handle blobs larger than 1023 we junk the blobs
 		encrypted = b''
-		first = True
+		first = not self.settings.QArg
 		splits = [blob[x:x+self.MAXUNPADDEDTREZORENCRYPTSIZE] for x in range(0, len(blob), self.MAXUNPADDEDTREZORENCRYPTSIZE)]
 		curr, max = 0, len(splits)
 		for junk in splits:
@@ -577,7 +582,7 @@ class FileMap(object):
 		iv, encryptedblob = encryptedblob[:BLOCKSIZE], encryptedblob[BLOCKSIZE:]
 		# we junk the input, decrypt and reassemble the plaintext
 		blob = b''
-		first = True
+		first = not self.settings.QArg
 		self.settings.mlogger.log("Press confirm on Trezor device for second level "
 			"file decryption on Trezor device itself (if necessary).", logging.DEBUG, "Encryption")
 		self.settings.mlogger.log("Trezor decryption: encrypted-size = %d" % (len(encryptedblob)), logging.DEBUG, "Encryption")

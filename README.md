@@ -41,7 +41,7 @@ Below a sample screenshot. More screenshots [here](screenshots).
 
 ![screenshot](screenshots/screenshot_TrezorSymmetricFileEncryption_mainWindow6.version04b.png)
 
-# Build and runtime requirements
+# Runtime requirements
 
   * Use of passphrases must have been already enabled on your [Trezor](https://www.trezor.io) device.
   * [Trezor](https://www.trezor.io) device
@@ -86,132 +86,142 @@ or
 Run-time command line options are
 
 ```
-TrezorSymmetricFileEncryption.py [-v] [-h] [-l <level>] [-t] [-e | -o | -d | -m | -n] [-2] [-s] [-w] [-p <passphrase>] [-r] [-R] <files>
-    -v, --version
-            print the version number
-    -h, --help
-            print short help text
-    -l, --logging
-            set logging level, integer from 1 to 5, 1=full logging, 5=no logging
-    -t, --terminal
-            run in the terminal, except for a possible PIN query
-            and a Passphrase query this avoids the GUI
-    -e, --encrypt
-            encrypt file and keep output filename as plaintext
-            (appends .tsfe suffix to input file)
-    -o, --obfuscatedencrypt
-            encrypt file and obfuscate output file name
-    -d, --decrypt
-            decrypt file
-    -m, --encnameonly
-            just encrypt the plaintext filename, show what the obfuscated
-            filename would be; does not encrypt the file itself;
-            incompaible with `-d` and `-n`
-    -n, --decnameonly
-            just decrypt the obfuscated filename;
-            does not decrypt the file itself;
-            incompaible with `-o`, `-e`, and `-m`
-    -2, --twice
-            paranoid mode; encrypt file a second time on the Trezor chip itself;
-            only relevant for `-e` and `-o`; ignored in all other cases.
-            Consider filesize: The Trezor chip is slow. 1M takes roughly 75 seconds.
-    -p, --passphrase
-            master passphrase used for Trezor.
-            It is recommended that you do not use this command line option
-            but rather give the passphrase through a small window interaction.
-    -r, --readpinfromstdin
-            read the PIN, if needed, from the standard input, i.e. terminal,
-            when in terminal mode `-t`. By default, even with `-t` set
-            it is read via a GUI window.
-    -R, --readpassphrasefromstdin
-            read the passphrase, when needed, from the standard input,
-            when in terminal mode `-t`. By default, even with `-t` set
-            it is read via a GUI window.
-    -s, --safety
-            doublechecks the encryption process by decrypting the just
-            encrypted file immediately and comparing it to original file;
-            doublechecks the decryption process by encrypting the just
-            decrypted file immediately and comparing it to original file;
-            Ignored for `-m` and `-n`.
-            Primarily useful for testing.
-    -w, --wipe
-            shred the inputfile after creating the output file
-            i.e. shred the plaintext file after encryption or
-            shred the encrypted file after decryption;
-            only relevant for `-d`, `-e` and `-o`; ignored in all other cases.
-            Use with extreme caution. May be used together with `-s`.
-    <files>
-            one or multiple files to be encrypted or decrypted
+TrezorSymmetricFileEncryption.py [-v] [-h] [-l <level>] [-t]
+        [-e | -o | -d | -m | -n]
+        [-2] [-s] [-w] [-p <passphrase>] [-r] [-R] [q] <files>
+-v, --version
+        print the version number
+-h, --help
+        print short help text
+-l, --logging
+        set logging level, integer from 1 to 5, 1=full logging, 5=no logging
+-t, --terminal
+        run in the terminal, except for a possible PIN query
+        and a Passphrase query this avoids the GUI
+-e, --encrypt
+        encrypt file and keep output filename as plaintext
+        (appends .tsfe suffix to input file)
+-o, --obfuscatedencrypt
+        encrypt file and obfuscate output file name
+-d, --decrypt
+        decrypt file
+-m, --encnameonly
+        just encrypt the plaintext filename, show what the obfuscated
+        filename would be; does not encrypt the file itself;
+        incompaible with `-d` and `-n`
+-n, --decnameonly
+        just decrypt the obfuscated filename;
+        does not decrypt the file itself;
+        incompaible with `-o`, `-e`, and `-m`
+-2, --twice
+        paranoid mode; encrypt file a second time on the Trezor chip itself;
+        only relevant for `-e` and `-o`; ignored in all other cases.
+        Consider filesize: The Trezor chip is slow. 1M takes roughly 75 seconds.
+-p, --passphrase
+        master passphrase used for Trezor.
+        It is recommended that you do not use this command line option
+        but rather give the passphrase through a small window interaction.
+-r, --readpinfromstdin
+        read the PIN, if needed, from the standard input, i.e. terminal,
+        when in terminal mode `-t`. By default, even with `-t` set
+        it is read via a GUI window.
+-R, --readpassphrasefromstdin
+        read the passphrase, when needed, from the standard input,
+        when in terminal mode `-t`. By default, even with `-t` set
+        it is read via a GUI window.
+-s, --safety
+        doublechecks the encryption process by decrypting the just
+        encrypted file immediately and comparing it to original file;
+        doublechecks the decryption process by encrypting the just
+        decrypted file immediately and comparing it to original file;
+        Ignored for `-m` and `-n`.
+        Primarily useful for testing.
+-w, --wipe
+        shred the inputfile after creating the output file
+        i.e. shred the plaintext file after encryption or
+        shred the encrypted file after decryption;
+        only relevant for `-d`, `-e` and `-o`; ignored in all other cases.
+        Use with extreme caution. May be used together with `-s`.
+-q, --noconfirm
+        Eliminates the `Confirm` click on the Trezor button.
+        This was only added to facilitate batch testing.
+        It should be used EXCLUSIVELY for testing purposes.
+        Do NOT use this option with real files!
+        Furthermore, files encryped with `-n` cannot be decrypted
+        without `-n`.
 
-    All arguments are optional.
+<files>
+        one or multiple files to be encrypted or decrypted
 
-    All output files are always placed in the same directory as the input files.
+All arguments are optional.
 
-    By default the GUI will be used.
+All output files are always placed in the same directory as the input files.
 
-    You can avoid the GUI by using `-t`, forcing the Terminal mode.
-    If you specify filename, possibly some `-o`, `-e`, or `-d` option, then
-    only PIN and Passphrase will be collected through windows.
+By default the GUI will be used.
 
-    Most of the time TrezorSymmetricFileEncryption can detect automatically if
-    it needs to decrypt or encrypt by analyzing the given input file name.
-    So, in most of the cases you do not need to specify any
-    de/encryption option.
-    TrezorSymmetricFileEncryption will simply do the right thing.
-    In the very rare case that TrezorSymmetricFileEncryption determines
-    the wrong encrypt/decrypt operation you can force it to use the right one
-    by using either `-e` or `-d` or selecting the appropriate option in the GUI.
+You can avoid the GUI by using `-t`, forcing the Terminal mode.
+If you specify filename, possibly some `-o`, `-e`, or `-d` option, then
+only PIN and Passphrase will be collected through windows.
 
-    If TrezorSymmetricFileEncryption automatically determines
-    that it has to encrypt of file, it will chose by default the
-    `-e` option, and create a plaintext encrypted files with an `.tsfe` suffix.
+Most of the time TrezorSymmetricFileEncryption can detect automatically if
+it needs to decrypt or encrypt by analyzing the given input file name.
+So, in most of the cases you do not need to specify any
+de/encryption option.
+TrezorSymmetricFileEncryption will simply do the right thing.
+In the very rare case that TrezorSymmetricFileEncryption determines
+the wrong encrypt/decrypt operation you can force it to use the right one
+by using either `-e` or `-d` or selecting the appropriate option in the GUI.
 
-    If you want the output file name to be obfuscated you
-    must use the `-o` (obfuscate) flag or select that option in the GUI.
+If TrezorSymmetricFileEncryption automatically determines
+that it has to encrypt of file, it will chose by default the
+`-e` option, and create a plaintext encrypted files with an `.tsfe` suffix.
 
-    Be aware of computation time and file sizes when you use `-2` option.
-    Encrypting on the Trezor takes time: 1M roughtly 75sec. 50M about 1h.
-    Without `-2` it is very fast, a 1G file taking roughly 15 seconds.
+If you want the output file name to be obfuscated you
+must use the `-o` (obfuscate) flag or select that option in the GUI.
 
-    For safety the file permission of encrypted files is set to read-only.
+Be aware of computation time and file sizes when you use `-2` option.
+Encrypting on the Trezor takes time: 1M roughtly 75sec. 50M about 1h.
+Without `-2` it is very fast, a 1G file taking roughly 15 seconds.
 
-    Examples:
-    # specify everything in the GUI
-    TrezorSymmetricFileEncryption.py
+For safety the file permission of encrypted files is set to read-only.
 
-    # specify everything in the GUI, set logging to verbose Debug level
-    TrezorSymmetricFileEncryption.py -l 1
+Examples:
+# specify everything in the GUI
+TrezorSymmetricFileEncryption.py
 
-    # encrypt contract producing contract.doc.tsfe
-    TrezorSymmetricFileEncryption.py contract.doc
+# specify everything in the GUI, set logging to verbose Debug level
+TrezorSymmetricFileEncryption.py -l 1
 
-    # encrypt contract and obfuscate output producing e.g. TQFYqK1nha1IfLy_qBxdGwlGRytelGRJ
-    TrezorSymmetricFileEncryption.py -o contract.doc
+# encrypt contract producing contract.doc.tsfe
+TrezorSymmetricFileEncryption.py contract.doc
 
-    # encrypt contract and obfuscate output producing e.g. TQFYqK1nha1IfLy_qBxdGwlGRytelGRJ
-    # performs safety check and then shreds contract.doc
-    TrezorSymmetricFileEncryption.py -e -o -s -w contract.doc
+# encrypt contract and obfuscate output producing e.g. TQFYqK1nha1IfLy_qBxdGwlGRytelGRJ
+TrezorSymmetricFileEncryption.py -o contract.doc
 
-    # decrypt contract producing contract.doc
-    TrezorSymmetricFileEncryption.py contract.doc.tsfe
+# encrypt contract and obfuscate output producing e.g. TQFYqK1nha1IfLy_qBxdGwlGRytelGRJ
+# performs safety check and then shreds contract.doc
+TrezorSymmetricFileEncryption.py -e -o -s -w contract.doc
 
-    # decrypt obfuscated contract producing contract.doc
-    TrezorSymmetricFileEncryption.py TQFYqK1nha1IfLy_qBxdGwlGRytelGRJ
+# decrypt contract producing contract.doc
+TrezorSymmetricFileEncryption.py contract.doc.tsfe
 
-    # shows plaintext name of encrypted file, e.g. contract.doc
-    TrezorSymmetricFileEncryption.py -n TQFYqK1nha1IfLy_qBxdGwlGRytelGRJ
+# decrypt obfuscated contract producing contract.doc
+TrezorSymmetricFileEncryption.py TQFYqK1nha1IfLy_qBxdGwlGRytelGRJ
 
-    Keyboard shortcuts of GUI:
-    Apply, Save: Control-A, Control-S
-    Cancel, Quit: Esc, Control-Q
-    Copy to clipboard: Control-C
-    Version, About: Control-V
-    Set encrypt operation: Control-E
-    Set decrypt operation: Control-D
-    Set obfuscate option: Control-O
-    Set twice option: Control-2
-    Set safety option: Control-T
-    Set wipe option: Control-W
+# shows plaintext name of encrypted file, e.g. contract.doc
+TrezorSymmetricFileEncryption.py -n TQFYqK1nha1IfLy_qBxdGwlGRytelGRJ
+
+Keyboard shortcuts of GUI:
+Apply, Save: Control-A, Control-S
+Cancel, Quit: Esc, Control-Q
+Copy to clipboard: Control-C
+Version, About: Control-V
+Set encrypt operation: Control-E
+Set decrypt operation: Control-D
+Set obfuscate option: Control-O
+Set twice option: Control-2
+Set safety option: Control-T
+Set wipe option: Control-W
 ```
 
 # Testing

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -11,6 +12,7 @@ from PyQt5.QtCore import QT_VERSION_STR
 from PyQt5.Qt import PYQT_VERSION_STR
 
 import basics
+from encoding import normalize_nfc
 
 """
 This is generic code that should work untouched accross all applications.
@@ -23,17 +25,17 @@ Requires PyQt5.
 """
 
 
-def input23(prompt=u''):
+def input23(prompt=u''):  # Py2-vs-Py3:
 	"""
 	Utility function to bridge Py2 and Py3 incompatibilities.
 	Maps Py2 raw_input() to input() for Py2.
 	Py2: raw_input()
 	Py3: input()
 	"""
-	if sys.version_info[0] < 3:
-		return raw_input(prompt)
+	if sys.version_info[0] < 3:  # Py2-vs-Py3:
+		return normalize_nfc(raw_input(prompt))
 	else:
-		return input(prompt)
+		return normalize_nfc(input(prompt))
 
 
 class MLogger(object):
@@ -284,6 +286,13 @@ class BaseSettings(object):
 		self.LArg = basics.DEFAULT_LOG_LEVEL
 
 		if logger is None:
+			"""
+			If "import sys" is not repeated here then
+			logger will fail with error
+			UnicodeEncodeError: 'latin-1' codec can't encode character '\u1ebd' in position 1: ordinal not in range(256)
+			when foreign strings like "ñẽë儿ë" are used in the command line.
+			"""
+			import sys
 			logging.basicConfig(stream=sys.stderr, level=basics.DEFAULT_LOG_LEVEL)
 			self.logger = logging.getLogger(basics.LOGGER_ACRONYM)
 		else:
@@ -395,6 +404,7 @@ class BaseArgs(object):
 			sys.exit(2)
 		loglevelused = False
 		for opt, arg in opts:
+			arg = normalize_nfc(arg)
 			if opt in ("-h", "--help"):
 				self.printUsage()
 				sys.exit()

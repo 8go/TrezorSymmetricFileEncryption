@@ -37,8 +37,9 @@ Maps Py2 raw_input() to input() for Py2.
 Py2: raw_input()
 Py3: input()
 sys.version_info[0]
+Py2-vs-Py3:
 """
-try:
+try:  # Py2-vs-Py3:
 	input = raw_input
 except NameError:
 	pass
@@ -229,8 +230,8 @@ class TrezorChooser(object):
 						'between %d and %d. Try again.' % (0, ii))
 					continue
 				break
-			# dictionaries are different in Py2 and Py3
-			if sys.version_info[0] > 2:
+			# Py2-vs-Py3: dictionaries are different in Py2 and Py3
+			if sys.version_info[0] > 2:  # Py2-vs-Py3:
 				deviceStr = list(deviceMap.keys())[ii]
 			else:
 				deviceStr = deviceMap.keys()[ii]

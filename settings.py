@@ -56,6 +56,7 @@ class Settings(BaseSettings):
 		self.AArg = None  # -R read passphrase
 		self.SArg = False  # Safety check
 		self.WArg = False  # Wipe plaintxt after encryption
+		self.QArg = False  # noconfirm
 		self.inputFiles = []  # list of input filenames
 
 	def logSettings(self):
@@ -140,6 +141,7 @@ class Settings(BaseSettings):
 			"settings.AArg = %s\n" % self.AArg +
 			"settings.SArg = %s\n" % self.SArg +
 			"settings.WArg = %s\n" % self.WArg +
+			"settings.QArg = %s\n" % self.QArg +
 			"settings.inputFiles = %s" % self.inputFiles)
 
 
@@ -168,7 +170,7 @@ class Args(BaseArgs):
 	def printUsage(self):
 		print("""TrezorSymmetricFileEncryption.py [-v] [-h] [-l <level>] [-t]
 				[-e | -o | -d | -m | -n]
-				[-2] [-s] [-w] [-p <passphrase>] [-r] [-R] <files>
+				[-2] [-s] [-w] [-p <passphrase>] [-r] [-R] [q] <files>
 		-v, --version
 				print the version number
 		-h, --help
@@ -222,6 +224,14 @@ class Args(BaseArgs):
 				shred the encrypted file after decryption;
 				only relevant for `-d`, `-e` and `-o`; ignored in all other cases.
 				Use with extreme caution. May be used together with `-s`.
+		-q, --noconfirm
+				Eliminates the `Confirm` click on the Trezor button.
+				This was only added to facilitate batch testing.
+				It should be used EXCLUSIVELY for testing purposes.
+				Do NOT use this option with real files!
+				Furthermore, files encryped with `-n` cannot be decrypted
+				without `-n`.
+
 		<files>
 				one or multiple files to be encrypted or decrypted
 
@@ -318,10 +328,11 @@ class Args(BaseArgs):
 		if settings is None:
 			settings = self.settings
 		try:
-			opts, args = getopt.getopt(argv, "vhl:tmn2swdeop:rR",
+			opts, args = getopt.getopt(argv, "vhl:tmn2swdeop:rRq",
 				["version", "help", "logging=", "terminal", "encnameonly", "decnameonly",
 				"twice", "safety", "decrypt", "encrypt", "obfuscatedencrypt",
-				"passphrase=", "readpinfromstdin", "readpassphrasefromstdin"])
+				"passphrase=", "readpinfromstdin", "readpassphrasefromstdin",
+				"noconfirm"])
 		except getopt.GetoptError as e:
 			logger.critical(u'Wrong arguments. Error: %s.', e)
 			try:
@@ -333,6 +344,7 @@ class Args(BaseArgs):
 			sys.exit(2)
 		loglevelused = False
 		for opt, arg in opts:
+			arg = encoding.normalize_nfc(arg)
 			if opt in ("-h", "--help"):
 				self.printUsage()
 				sys.exit()
@@ -366,6 +378,8 @@ class Args(BaseArgs):
 				settings.RArg = True
 			elif opt in ("-R", "--readpassphrasefromstdin"):
 				settings.AArg = True
+			elif opt in ("-q", "--noconfirm"):
+				settings.QArg = True
 
 		if loglevelused:
 			try:
@@ -387,18 +401,18 @@ class Args(BaseArgs):
 			# convert all input as possible to unicode UTF-8 NFC
 			settings.inputFiles.append(encoding.normalize_nfc(arg))
 		if (settings.DArg and settings.EArg) or (settings.DArg and settings.OArg):
-			self.mlogger.log("You cannot specify both decrypt and encrypt. "
+			self.settings.mlogger.log("You cannot specify both decrypt and encrypt. "
 				"It is one or the other. Either -d or -e or -o.", logging.CRITICAL,
 				"Wrong arguments", True, logger)
 			sys.exit(2)
 		if (settings.MArg and settings.DArg) or (settings.MArg and settings.NArg):
-			self.mlogger.log("You cannot specify both \"encrypt filename\" and "
+			self.settings.mlogger.log("You cannot specify both \"encrypt filename\" and "
 				"\"decrypt file(name)\". It is one or the other. "
 				"Don't use -m when using -d or -n (and vice versa).", logging.CRITICAL,
 				"Wrong arguments", True, logger)
 			sys.exit(2)
 		if (settings.NArg and settings.EArg) or (settings.NArg and settings.OArg) or (settings.NArg and settings.MArg):
-			self.mlogger.log("You cannot specify both \"decrypt filename\" and "
+			self.settings.mlogger.log("You cannot specify both \"decrypt filename\" and "
 				"\"encrypt file(name)\". It is one or the other. Don't use "
 				"-n when using -e, -o, or -m (and vice versa).", logging.CRITICAL,
 				"Wrong arguments", True, logger)
@@ -411,25 +425,25 @@ class Args(BaseArgs):
 		if settings.NArg:
 			settings.DArg = False
 		if (settings.MArg and settings.DArg):
-			self.mlogger.log("You cannot specify -d and -m at the same time.", logging.CRITICAL,
+			self.settings.mlogger.log("You cannot specify -d and -m at the same time.", logging.CRITICAL,
 				"Wrong arguments", True, logger)
 			sys.exit(2)
 		if (settings.NArg and settings.EArg) or (settings.NArg and settings.OArg):
-			self.mlogger.log("You cannot specify -e or -o at the same time as -n.", logging.CRITICAL,
+			self.settings.mlogger.log("You cannot specify -e or -o at the same time as -n.", logging.CRITICAL,
 				"Wrong arguments", True, logger)
 			sys.exit(2)
 		if (settings.MArg and settings.OArg) or (settings.MArg and settings.XArg) or \
 			(settings.MArg and settings.SArg) or (settings.MArg and settings.WArg):
-			self.mlogger.log("You cannot specify -o, -2, -s or -w with -m", logging.CRITICAL,
+			self.settings.mlogger.log("You cannot specify -o, -2, -s or -w with -m", logging.CRITICAL,
 				"Wrong arguments", True, logger)
 			sys.exit(2)
 		if (settings.NArg and settings.OArg) or (settings.NArg and settings.XArg) or \
 			(settings.NArg and settings.SArg) or (settings.NArg and settings.WArg):
-			self.mlogger.log("You cannot specify -o, -2, -s or -w with -n", logging.CRITICAL,
+			self.settings.mlogger.log("You cannot specify -o, -2, -s or -w with -n", logging.CRITICAL,
 				"Wrong arguments", True, logger)
 			sys.exit(2)
 		if (settings.DArg and settings.OArg) or (settings.DArg and settings.XArg):
-			self.mlogger.log("You cannot specify -o or -2 with -d", logging.CRITICAL,
+			self.settings.mlogger.log("You cannot specify -o or -2 with -d", logging.CRITICAL,
 				"Wrong arguments", True, logger)
 			sys.exit(2)
 
@@ -448,3 +462,8 @@ class Args(BaseArgs):
 			logging.INFO, "Logging", True, logger)
 		self.settings.mlogger.log(self.settings,
 			logging.DEBUG, "Settings", True, logger)
+		if settings.QArg:
+			self.settings.mlogger.log(u'Warning: the `--noconfirm` option is set. '
+				'This should only be set for batch testing. Do not use this '
+				'mode with real files.',
+				logging.WARNING, "Settings", True, logger)

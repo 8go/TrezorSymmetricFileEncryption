@@ -102,3 +102,6 @@ __*.test.txt
 __*.random.bin
 TQFYqK1nha1IfLy_qBxdGwlGRytelGRJ
 __time_measurements__.txt
+
+test.log
+

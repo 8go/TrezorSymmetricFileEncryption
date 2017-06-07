@@ -14,7 +14,7 @@ default values, etc.
 NAME = u'TrezorSymmetricFileEncryption'
 
 # Name of software version, must be less than 16 bytes long
-VERSION_STR = u'v0.6.0'
+VERSION_STR = u'v0.6.1'
 
 # Date of software version, only used in GUI
 VERSION_DATE_STR = u'May 2017'

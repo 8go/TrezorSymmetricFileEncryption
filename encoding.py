@@ -37,8 +37,9 @@ def normalize_nfc(txt):
 	returns str-equivalent in NFC unicode format.
 	Py2: str (aslias bytes), unicode
 	Py3: bytes, str (in unicode format)
+	Py2-vs-Py3:
 	"""
-	if sys.version_info[0] < 3:
+	if sys.version_info[0] < 3:  # Py2-vs-Py3:
 		if isinstance(txt, unicode):
 			return unicodedata.normalize('NFC', txt)
 		if isinstance(txt, str):
@@ -57,8 +58,9 @@ def tobytes(txt):
 	Takes string-equivalent or bytes-equivalent and returns bytesequivalent.
 	Py2: str (aslias bytes), unicode
 	Py3: bytes, str (in unicode format)
+	Py2-vs-Py3:
 	"""
-	if sys.version_info[0] < 3:
+	if sys.version_info[0] < 3:  # Py2-vs-Py3:
 		if isinstance(txt, unicode):
 			return txt.encode('utf-8')
 		if isinstance(txt, str):  # == bytes
@@ -86,13 +88,13 @@ class Padding(object):
 		Python 3 returns bytes.
 		"""
 		BS = self.blocksize
-		if sys.version_info[0] > 2:
+		if sys.version_info[0] > 2:  # Py2-vs-Py3:
 			return s + (BS - len(s) % BS) * bytes([BS - len(s) % BS])
 		else:
 			return s + (BS - len(s) % BS) * chr(BS - len(s) % BS)
 
 	def unpad(self, s):
-		if sys.version_info[0] > 2:
+		if sys.version_info[0] > 2:  # Py2-vs-Py3:
 			return s[0:-s[-1]]
 		else:
 			return s[0:-ord(s[-1])]
@@ -156,3 +158,12 @@ class PaddingHomegrown(object):
 		t = s[0:-(ord(s[-1])-ord('A')+1)]
 		BS = self.base64blocksize
 		return t + "=" * ((BS - len(t) % BS) % BS)
+
+
+def escape(str):
+	"""
+	Escape the letter \ as \\ in a string.
+	"""
+	if str is None:
+		return u''
+	return str.replace('\\', '\\\\')
