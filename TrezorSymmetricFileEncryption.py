@@ -16,6 +16,7 @@ from __future__ import print_function
 
 import sys
 import logging
+import codecs
 
 from PyQt5.QtWidgets import QApplication  # for the clipboard and window
 
@@ -70,6 +71,15 @@ def useTerminal(fileMap, settings):
 
 
 def main():
+	if sys.version_info[0] < 3:  # Py2-vs-Py3:
+		# redirecting output to a file can cause unicode problems
+		# read: https://stackoverflow.com/questions/5530708/
+		# To fix it either run the scripts as: PYTHONIOENCODING=utf-8 python TrezorSymmetricFileEncryption.py
+		# or add the following line of code.
+		# Only shows up in python2 TrezorSymmetricFileEncryption.py >> log scenarios
+		# Exception: 'ascii' codec can't encode characters in position 10-13: ordinal not in range(128)
+		sys.stdout = codecs.getwriter('utf-8')(sys.stdout)
+
 	app = QApplication(sys.argv)
 	if app is None:  # just to get rid f the linter warning on above line
 		print("Critical error: Qt cannot be initialized.")

@@ -14,10 +14,10 @@ default values, etc.
 NAME = u'TrezorSymmetricFileEncryption'
 
 # Name of software version, must be less than 16 bytes long
-VERSION_STR = u'v0.6.1'
+VERSION_STR = u'v0.6.2'
 
 # Date of software version, only used in GUI
-VERSION_DATE_STR = u'May 2017'
+VERSION_DATE_STR = u'June 2017'
 
 # default log level
 DEFAULT_LOG_LEVEL = logging.INFO  # CRITICAL, ERROR, WARNING, INFO, DEBUG

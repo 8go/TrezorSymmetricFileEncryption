@@ -126,19 +126,36 @@ if [ $# -ge 1 ]; then
         echo "End    : If no warnings or errors were echoed, then there were no errors, all tests terminated successfully."
     done
     echo
-    echo "Log file contain " $(grep -i error *$LOG | wc -l) " errors."
-    echo "Log file contain " $(grep -i critical *$LOG | wc -l) " critical issues."
-    echo "Log file contain " $(grep -i warning *$LOG | grep -v noconfirm | grep -v "The option \`--wipe\` is set" | grep -v "exists and encryption will overwrite it" | wc -l) " warnings."
-    echo "Log file contain " $(grep -i ascii *$LOG | wc -l) " ascii-vs-unicode issues."
-    echo "Log file contain " $(grep -i unicode *$LOG | wc -l) " unicode issues."
-    echo "Log file contain " $(grep -i latin *$LOG | wc -l) " latin-vs-unicode issues."
-    echo "Log file contain " $(grep -i byte *$LOG | grep -v " from file " | grep -v " to file " | wc -l) " byte-vs-unicode issues."
+    count=$(grep -i error *$LOG | wc -l)
+    sum=$((count))
+    echo "Log files contain " $count " errors."
+    count=$(grep -i critical *$LOG | wc -l)
+    sum=$((sum + count))
+    echo "Log files contain " $count " critical issues."
+    count=$(grep -i warning *$LOG | grep -v noconfirm | grep -v "The option \`--wipe\` is set" | grep -v "exists and encryption will overwrite it" | wc -l)
+    sum=$((sum + count))
+    echo "Log files contain " $count " warnings."
+    count=$(grep -i ascii *$LOG | wc -l)
+    sum=$((sum + count))
+    echo "Log files contain " $count " ascii-vs-unicode issues."
+    count=$(grep -i unicode *$LOG | wc -l)
+    sum=$((sum + count))
+    echo "Log files contain " $count " unicode issues."
+    count=$(grep -i latin *$LOG | wc -l)
+    sum=$((sum + count))
+    echo "Log files contain " $count " latin-vs-unicode issues."
+    count=$(grep -i byte *$LOG | grep -v " from file " | grep -v " to file " | wc -l)
+    sum=$((sum + count))
+    echo "Log files contain " $count " byte-vs-unicode issues."
+    if [ $sum -eq 0 ]; then
+        rm -f $LOG
+    fi
     popd > /dev/null
 else
     # zero arguments, we run preset default test cases
     echo "Note   : This default test will take about 3-10 minutes."
     echo "Note   : If you have a PIN set, you will have to possibly enter it several times. Consider disabling it."
-    echo "Note   : Be aware that you will have to press the 'Confirm' button on the Trezor many times."
+    #echo "Note   : Be aware that you will have to press the 'Confirm' button on the Trezor many times."
     ${0} 1K 10K 100K 1M
 fi
 exit 0
