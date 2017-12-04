@@ -18,7 +18,7 @@ allows you to symmetrically encrypt and decrypt files.
   * Requires confirmation button click on Trezor device to perform decrypt operation.
   * For the paranoid there is now an option to encrypt the file(s) twice.
     In any mode, the file is first AES encrypted on the PC with a key generated
-    and en/decrypted by the Trezor device requiring a lick on the `Confirm`
+    and en/decrypted by the Trezor device requiring a click on the `Confirm`
     button of the Trezor. In the paranoid mode, the file is then encrypted
     a second time. This second encryption is done within the Trezor device
     and not on the PC, with no key ever touching the memory of the PC.
